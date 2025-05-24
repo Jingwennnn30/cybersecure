@@ -1,7 +1,15 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, Title, Text, Grid, Metric, AreaChart, DonutChart } from '@tremor/react';
 import Navigation from '../components/Navigation';
-import { SunIcon, MoonIcon } from '@heroicons/react/24/solid';
+import { SunIcon, MoonIcon, LinkIcon } from '@heroicons/react/24/solid';
+import AIChatbot from '../components/AIChatbot';
+
+// Telegram SVG icon (since Heroicons doesn't have Telegram)
+const TelegramIcon = (props) => (
+  <svg {...props} fill="currentColor" viewBox="0 0 24 24">
+    <path d="M21.944 2.506a1.5 1.5 0 0 0-1.63-.23L2.7 10.01a1.5 1.5 0 0 0 .13 2.77l4.45 1.56 1.7 5.09a1.5 1.5 0 0 0 2.7.23l2.13-3.5 4.38 3.23a1.5 1.5 0 0 0 2.37-1.01l2.25-13.5a1.5 1.5 0 0 0-.17-1.34z" />
+  </svg>
+);
 
 const alertData = [
   { date: '2024-01', alerts: 234, resolved: 220 },
@@ -20,11 +28,45 @@ const severityData = [
 ];
 
 function Dashboard({ darkMode, setDarkMode }) {
-  // Sidebar and main content styling
   const sidebarClass = "w-72 bg-white dark:bg-gray-900 p-6 shadow-xl border-r border-gray-200 dark:border-gray-800 fixed h-screen flex flex-col";
   const mainClass = "flex-1 pl-80 p-8 overflow-auto bg-background-light dark:bg-gray-900 transition-colors min-h-screen";
 
-  // Toggle switch (standardized position)
+  // Telegram
+  const telegramLink = "https://t.me/+oO1pnXg2Qh00ZDY1";
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    navigator.clipboard.writeText(telegramLink);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  // Live Alerts state
+  const [liveAlerts, setLiveAlerts] = useState([]);
+
+  // Fetch live alerts from backend every 5 seconds
+  useEffect(() => {
+    const fetchAlerts = async () => {
+      try {
+        const res = await fetch('http://localhost:4000/api/live-alerts'); // Change to your backend URL if needed
+        if (res.ok) {
+          const data = await res.json();
+          setLiveAlerts(Array.isArray(data) ? data : []);
+        }
+      } catch (err) {
+        // Optionally handle error
+      }
+    };
+    fetchAlerts();
+    const interval = setInterval(fetchAlerts, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Dismiss handler
+  const handleDismiss = (idx) => {
+    setLiveAlerts((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  // Toggle switch
   const Toggle = (
     <label className="flex items-center cursor-pointer select-none">
       <div className="relative">
@@ -54,6 +96,20 @@ function Dashboard({ darkMode, setDarkMode }) {
     </label>
   );
 
+  // Helper for badge color
+  const getSeverityBadge = (severity) => {
+    switch (severity?.toLowerCase()) {
+      case 'high':
+      case 'critical':
+        return 'bg-danger';
+      case 'medium':
+        return 'bg-warning';
+      case 'low':
+        return 'bg-success';
+      default:
+        return 'bg-gray-400';
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background-light dark:bg-gray-900 dark:text-gray-100 transition-colors">
@@ -70,16 +126,44 @@ function Dashboard({ darkMode, setDarkMode }) {
 
         {/* Main Content */}
         <main className={mainClass}>
-          {/* Standardized Toggle Switch Position */}
+          {/* Toggle */}
           <div className="flex justify-end mb-6">
             {Toggle}
           </div>
 
-          {/* Heading Section */}
+          {/* Heading */}
           <div className="mb-8">
             <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">Dashboard</h2>
             <p className="text-gray-600 dark:text-gray-300 text-lg">Real-time security monitoring and analysis</p>
           </div>
+
+          {/* Telegram Channel Section */}
+          <div className="flex items-center gap-3 mb-6">
+            <a
+              href={telegramLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white transition-colors"
+              title="Open Telegram Channel"
+            >
+              <TelegramIcon className="w-5 h-5" />
+              <span className="font-medium">Telegram Channel</span>
+            </a>
+            <button
+              onClick={handleCopy}
+              className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+              title="Copy Telegram Channel Link"
+              type="button"
+            >
+              <LinkIcon className="w-5 h-5 text-blue-500" />
+            </button>
+            {copied && (
+              <span className="ml-2 text-xs text-green-600 dark:text-green-400 bg-white dark:bg-gray-800 px-2 py-1 rounded shadow">
+                Copied the telegram channel invite link
+              </span>
+            )}
+          </div>
+          {/* End Telegram Channel Section */}
 
           {/* Stats Grid */}
           <Grid numItems={1} numItemsSm={2} numItemsLg={4} className="gap-6 mb-6">
@@ -143,7 +227,7 @@ function Dashboard({ darkMode, setDarkMode }) {
           </div>
 
           {/* Live Alerts Feed */}
-          <Card className="hover:shadow-card transition-shadow duration-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+          <Card className="hover:shadow-card transition-shadow duration-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-amber-500">
             <div className="flex justify-between items-center mb-6">
               <div>
                 <Title className="text-gray-900 dark:text-gray-100">Live Alerts</Title>
@@ -154,44 +238,54 @@ function Dashboard({ darkMode, setDarkMode }) {
               </button>
             </div>
             <div className="space-y-4">
-              <div className="p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-amber-500 transition-colors duration-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Text className="font-medium text-gray-900 dark:text-gray-100">Brute Force Attempt</Text>
-                    <Text className="text-sm text-gray-500 dark:text-gray-300 mt-1">Source IP: 192.168.1.100</Text>
+              {liveAlerts.length === 0 ? (
+                <div className="p-4 text-gray-500 dark:text-gray-400">No live alerts.</div>
+              ) : (
+                liveAlerts.map((alert, idx) => (
+                  <div
+                    key={idx}
+                    className="p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-amber-500 transition-colors duration-200"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Text className="font-medium text-gray-900 dark:text-gray-100">
+                          Threat Intel IP
+                        </Text>
+                        <Text className="text-sm text-gray-500 dark:text-gray-300 mt-1">
+                          {alert.short_description}
+                        </Text>
+                        <div className="mt-1 flex gap-4">
+                          <span className="text-xs text-gray-700 dark:text-gray-200">
+                            <b>Risk Score:</b> {alert.risk_score}
+                          </span>
+                          <span className="text-xs text-gray-700 dark:text-gray-200">
+                            <b>Severity:</b> {alert.severity}
+                          </span>
+                        </div>
+                      </div>
+                      <span className={`px-3 py-1 text-xs rounded-full text-white ${getSeverityBadge(alert.severity)}`}>
+                        {alert.severity ? alert.severity.charAt(0).toUpperCase() + alert.severity.slice(1) : 'Unknown'}
+                      </span>
+                    </div>
+                    <div className="mt-3 flex items-center space-x-4">
+                      <button className="text-xs text-primary hover:text-primary-hover transition-colors">
+                        Investigate
+                      </button>
+                      <button
+                        className="text-xs text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 transition-colors"
+                        onClick={() => handleDismiss(idx)}
+                      >
+                        Dismiss
+                      </button>
+                    </div>
                   </div>
-                  <span className="px-3 py-1 text-xs bg-danger text-white rounded-full">Critical</span>
-                </div>
-                <div className="mt-3 flex items-center space-x-4">
-                  <button className="text-xs text-primary hover:text-primary-hover transition-colors">
-                    Investigate
-                  </button>
-                  <button className="text-xs text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 transition-colors">
-                    Dismiss
-                  </button>
-                </div>
-              </div>
-
-              <div className="p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-amber-500 transition-colors duration-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Text className="font-medium text-gray-900 dark:text-gray-100">Suspicious Login</Text>
-                    <Text className="text-sm text-gray-500 dark:text-gray-300 mt-1">User: admin@example.com</Text>
-                  </div>
-                  <span className="px-3 py-1 text-xs bg-warning text-white rounded-full">Warning</span>
-                </div>
-                <div className="mt-3 flex items-center space-x-4">
-                  <button className="text-xs text-primary hover:text-primary-hover transition-colors">
-                    Investigate
-                  </button>
-                  <button className="text-xs text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 transition-colors">
-                    Dismiss
-                  </button>
-                </div>
-              </div>
+                ))
+              )}
             </div>
           </Card>
         </main>
+        {/* AI Chatbot (always visible, fixed position) */}
+        <AIChatbot />
       </div>
     </div>
   );
