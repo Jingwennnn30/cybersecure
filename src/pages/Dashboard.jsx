@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, Title, Text, Grid, Metric, AreaChart, DonutChart } from '@tremor/react';
 import Navigation from '../components/Navigation';
 import { SunIcon, MoonIcon, LinkIcon } from '@heroicons/react/24/solid';
@@ -32,12 +32,38 @@ function Dashboard({ darkMode, setDarkMode }) {
   const mainClass = "flex-1 pl-80 p-8 overflow-auto bg-background-light dark:bg-gray-900 transition-colors min-h-screen";
 
   // Telegram
-  const telegramLink = "https://t.me/+oO1pnXg2Qh00ZDY1"; // <-- Replace with your actual link
-  const [copied, setCopied] = React.useState(false);
+  const telegramLink = "https://t.me/+oO1pnXg2Qh00ZDY1";
+  const [copied, setCopied] = useState(false);
   const handleCopy = () => {
     navigator.clipboard.writeText(telegramLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
+  };
+
+  // Live Alerts state
+  const [liveAlerts, setLiveAlerts] = useState([]);
+
+  // Fetch live alerts from backend every 5 seconds
+  useEffect(() => {
+    const fetchAlerts = async () => {
+      try {
+        const res = await fetch('http://localhost:4000/api/live-alerts'); // Change to your backend URL if needed
+        if (res.ok) {
+          const data = await res.json();
+          setLiveAlerts(Array.isArray(data) ? data : []);
+        }
+      } catch (err) {
+        // Optionally handle error
+      }
+    };
+    fetchAlerts();
+    const interval = setInterval(fetchAlerts, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Dismiss handler
+  const handleDismiss = (idx) => {
+    setLiveAlerts((prev) => prev.filter((_, i) => i !== idx));
   };
 
   // Toggle switch
@@ -69,6 +95,21 @@ function Dashboard({ darkMode, setDarkMode }) {
       </span>
     </label>
   );
+
+  // Helper for badge color
+  const getSeverityBadge = (severity) => {
+    switch (severity?.toLowerCase()) {
+      case 'high':
+      case 'critical':
+        return 'bg-danger';
+      case 'medium':
+        return 'bg-warning';
+      case 'low':
+        return 'bg-success';
+      default:
+        return 'bg-gray-400';
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background-light dark:bg-gray-900 dark:text-gray-100 transition-colors">
@@ -186,7 +227,7 @@ function Dashboard({ darkMode, setDarkMode }) {
           </div>
 
           {/* Live Alerts Feed */}
-          <Card className="hover:shadow-card transition-shadow duration-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+          <Card className="hover:shadow-card transition-shadow duration-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-amber-500">
             <div className="flex justify-between items-center mb-6">
               <div>
                 <Title className="text-gray-900 dark:text-gray-100">Live Alerts</Title>
@@ -197,41 +238,49 @@ function Dashboard({ darkMode, setDarkMode }) {
               </button>
             </div>
             <div className="space-y-4">
-              <div className="p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-amber-500 transition-colors duration-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Text className="font-medium text-gray-900 dark:text-gray-100">Brute Force Attempt</Text>
-                    <Text className="text-sm text-gray-500 dark:text-gray-300 mt-1">Source IP: 192.168.1.100</Text>
+              {liveAlerts.length === 0 ? (
+                <div className="p-4 text-gray-500 dark:text-gray-400">No live alerts.</div>
+              ) : (
+                liveAlerts.map((alert, idx) => (
+                  <div
+                    key={idx}
+                    className="p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-amber-500 transition-colors duration-200"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Text className="font-medium text-gray-900 dark:text-gray-100">
+                          Threat Intel IP
+                        </Text>
+                        <Text className="text-sm text-gray-500 dark:text-gray-300 mt-1">
+                          {alert.short_description}
+                        </Text>
+                        <div className="mt-1 flex gap-4">
+                          <span className="text-xs text-gray-700 dark:text-gray-200">
+                            <b>Risk Score:</b> {alert.risk_score}
+                          </span>
+                          <span className="text-xs text-gray-700 dark:text-gray-200">
+                            <b>Severity:</b> {alert.severity}
+                          </span>
+                        </div>
+                      </div>
+                      <span className={`px-3 py-1 text-xs rounded-full text-white ${getSeverityBadge(alert.severity)}`}>
+                        {alert.severity ? alert.severity.charAt(0).toUpperCase() + alert.severity.slice(1) : 'Unknown'}
+                      </span>
+                    </div>
+                    <div className="mt-3 flex items-center space-x-4">
+                      <button className="text-xs text-primary hover:text-primary-hover transition-colors">
+                        Investigate
+                      </button>
+                      <button
+                        className="text-xs text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 transition-colors"
+                        onClick={() => handleDismiss(idx)}
+                      >
+                        Dismiss
+                      </button>
+                    </div>
                   </div>
-                  <span className="px-3 py-1 text-xs bg-danger text-white rounded-full">Critical</span>
-                </div>
-                <div className="mt-3 flex items-center space-x-4">
-                  <button className="text-xs text-primary hover:text-primary-hover transition-colors">
-                    Investigate
-                  </button>
-                  <button className="text-xs text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 transition-colors">
-                    Dismiss
-                  </button>
-                </div>
-              </div>
-
-              <div className="p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-amber-500 transition-colors duration-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Text className="font-medium text-gray-900 dark:text-gray-100">Suspicious Login</Text>
-                    <Text className="text-sm text-gray-500 dark:text-gray-300 mt-1">User: admin@example.com</Text>
-                  </div>
-                  <span className="px-3 py-1 text-xs bg-warning text-white rounded-full">Warning</span>
-                </div>
-                <div className="mt-3 flex items-center space-x-4">
-                  <button className="text-xs text-primary hover:text-primary-hover transition-colors">
-                    Investigate
-                  </button>
-                  <button className="text-xs text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 transition-colors">
-                    Dismiss
-                  </button>
-                </div>
-              </div>
+                ))
+              )}
             </div>
           </Card>
         </main>
