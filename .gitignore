@@ -1,0 +1,22 @@
+# node.js
+node_modules/
+build/
+
+# Logs
+logs
+*.log
+
+# dotenv
+.env
+
+# Docker
+*.pid
+*.sock
+docker-compose.override.yml
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
