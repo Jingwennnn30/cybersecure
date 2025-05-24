@@ -9,16 +9,16 @@ function AIChatbot() {
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`
-          p-4 rounded-full shadow-lg transition-all duration-300 transform
-          ${isOpen 
-            ? 'bg-amber-400 hover:bg-amber-500 scale-110' 
-            : 'bg-amber-500 hover:bg-amber-600 scale-100'
+          p-4 rounded-lg shadow-lg transition-all duration-300 transform
+          ${isOpen
+            ? 'bg-yellow-400 hover:bg-yellow-500 scale-110'
+            : 'bg-yellow-500 hover:bg-yellow-600 scale-100'
           }
         `}
       >
-        <ChatBubbleLeftRightIcon 
-          className="h-6 w-6 text-black" 
-          aria-hidden="true" 
+        <ChatBubbleLeftRightIcon
+          className="h-6 w-6 text-black"
+          aria-hidden="true"
         />
       </button>
 

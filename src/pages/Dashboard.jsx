@@ -1,7 +1,15 @@
 import React from 'react';
 import { Card, Title, Text, Grid, Metric, AreaChart, DonutChart } from '@tremor/react';
 import Navigation from '../components/Navigation';
-import { SunIcon, MoonIcon } from '@heroicons/react/24/solid';
+import { SunIcon, MoonIcon, LinkIcon } from '@heroicons/react/24/solid';
+import AIChatbot from '../components/AIChatbot';
+
+// Telegram SVG icon (since Heroicons doesn't have Telegram)
+const TelegramIcon = (props) => (
+  <svg {...props} fill="currentColor" viewBox="0 0 24 24">
+    <path d="M21.944 2.506a1.5 1.5 0 0 0-1.63-.23L2.7 10.01a1.5 1.5 0 0 0 .13 2.77l4.45 1.56 1.7 5.09a1.5 1.5 0 0 0 2.7.23l2.13-3.5 4.38 3.23a1.5 1.5 0 0 0 2.37-1.01l2.25-13.5a1.5 1.5 0 0 0-.17-1.34z" />
+  </svg>
+);
 
 const alertData = [
   { date: '2024-01', alerts: 234, resolved: 220 },
@@ -20,11 +28,19 @@ const severityData = [
 ];
 
 function Dashboard({ darkMode, setDarkMode }) {
-  // Sidebar and main content styling
   const sidebarClass = "w-72 bg-white dark:bg-gray-900 p-6 shadow-xl border-r border-gray-200 dark:border-gray-800 fixed h-screen flex flex-col";
   const mainClass = "flex-1 pl-80 p-8 overflow-auto bg-background-light dark:bg-gray-900 transition-colors min-h-screen";
 
-  // Toggle switch (standardized position)
+  // Telegram
+  const telegramLink = "https://t.me/+oO1pnXg2Qh00ZDY1"; // <-- Replace with your actual link
+  const [copied, setCopied] = React.useState(false);
+  const handleCopy = () => {
+    navigator.clipboard.writeText(telegramLink);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  // Toggle switch
   const Toggle = (
     <label className="flex items-center cursor-pointer select-none">
       <div className="relative">
@@ -54,7 +70,6 @@ function Dashboard({ darkMode, setDarkMode }) {
     </label>
   );
 
-
   return (
     <div className="min-h-screen bg-background-light dark:bg-gray-900 dark:text-gray-100 transition-colors">
       <div className="flex min-h-screen">
@@ -70,16 +85,44 @@ function Dashboard({ darkMode, setDarkMode }) {
 
         {/* Main Content */}
         <main className={mainClass}>
-          {/* Standardized Toggle Switch Position */}
+          {/* Toggle */}
           <div className="flex justify-end mb-6">
             {Toggle}
           </div>
 
-          {/* Heading Section */}
+          {/* Heading */}
           <div className="mb-8">
             <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">Dashboard</h2>
             <p className="text-gray-600 dark:text-gray-300 text-lg">Real-time security monitoring and analysis</p>
           </div>
+
+          {/* Telegram Channel Section */}
+          <div className="flex items-center gap-3 mb-6">
+            <a
+              href={telegramLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white transition-colors"
+              title="Open Telegram Channel"
+            >
+              <TelegramIcon className="w-5 h-5" />
+              <span className="font-medium">Telegram Channel</span>
+            </a>
+            <button
+              onClick={handleCopy}
+              className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+              title="Copy Telegram Channel Link"
+              type="button"
+            >
+              <LinkIcon className="w-5 h-5 text-blue-500" />
+            </button>
+            {copied && (
+              <span className="ml-2 text-xs text-green-600 dark:text-green-400 bg-white dark:bg-gray-800 px-2 py-1 rounded shadow">
+                Copied the telegram channel invite link
+              </span>
+            )}
+          </div>
+          {/* End Telegram Channel Section */}
 
           {/* Stats Grid */}
           <Grid numItems={1} numItemsSm={2} numItemsLg={4} className="gap-6 mb-6">
@@ -192,6 +235,8 @@ function Dashboard({ darkMode, setDarkMode }) {
             </div>
           </Card>
         </main>
+        {/* AI Chatbot (always visible, fixed position) */}
+        <AIChatbot />
       </div>
     </div>
   );
