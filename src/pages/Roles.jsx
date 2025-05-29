@@ -1,41 +1,69 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Card, Title, Text, Table, TableHead, TableRow, TableHeaderCell, TableBody, TableCell, Badge, Button
 } from '@tremor/react';
 import Navigation from '../components/Navigation';
 import UserForm from '../components/UserForm';
 import { PencilSquareIcon, TrashIcon } from '@heroicons/react/24/outline';
-
-const initialUsers = [
-    { id: 1, name: 'John Doe', email: 'john@example.com', role: 'Admin', status: 'Active' },
-    { id: 2, name: 'Jane Smith', email: 'jane@example.com', role: 'Analyst', status: 'Active' },
-    { id: 3, name: 'Mike Johnson', email: 'mike@example.com', role: 'Viewer', status: 'Inactive' },
-];
+import { collection, getDocs, doc, deleteDoc, addDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "../firebase";
+import { useRole } from '../contexts/RoleContext';
+import { auth } from '../firebase';
 
 function Roles({ darkMode, setDarkMode }) {
-    const [users, setUsers] = useState(initialUsers);
+    const [users, setUsers] = useState([]);
     const [showForm, setShowForm] = useState(false);
     const [editingUser, setEditingUser] = useState(null);
+    const role = useRole();
 
-    const handleAddUser = (userData) => {
-        const newUser = { ...userData, id: users.length + 1 };
-        setUsers([...users, newUser]);
-        setShowForm(false);
-    };
+    // For role request modal
+    const [showRequestModal, setShowRequestModal] = useState(false);
+    const [requestedRole, setRequestedRole] = useState("analyst");
+    const [requestMessage, setRequestMessage] = useState("");
+
+    // Fetch users from Firestore
+    useEffect(() => {
+        const fetchUsers = async () => {
+            const querySnapshot = await getDocs(collection(db, "users"));
+            const usersData = querySnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+                status: "Active" // You can update this if you store status in Firestore
+            }));
+            setUsers(usersData);
+        };
+        fetchUsers();
+    }, []);
 
     const handleEditUser = (userData) => {
-        if (editingUser) {
-            const updatedUsers = users.map((user) =>
-                user.id === editingUser.id ? { ...userData, id: user.id } : user
-            );
-            setUsers(updatedUsers);
-            setEditingUser(null);
+        // Implement Firestore update logic here if needed
+        setEditingUser(null);
+    };
+
+    const handleDeleteUser = async (userId) => {
+        if (window.confirm('Are you sure you want to delete this user?')) {
+            await deleteDoc(doc(db, "users", userId));
+            setUsers(users.filter((user) => user.id !== userId));
         }
     };
 
-    const handleDeleteUser = (userId) => {
-        if (window.confirm('Are you sure you want to delete this user?')) {
-            setUsers(users.filter((user) => user.id !== userId));
+    // Handle role request
+    const handleRoleRequest = async () => {
+        try {
+            const currentUser = users.find(u => u.email === auth.currentUser.email);
+            await addDoc(collection(db, "roleRequests"), {
+                requesterUID: auth.currentUser.uid,
+                name: currentUser?.name || "",
+                email: currentUser?.email || "",
+                currentRole: currentUser?.role || "",
+                requestedRole,
+                status: "pending",
+                timestamp: serverTimestamp()
+            });
+            setRequestMessage("Your request has been submitted. An administrator will review it soon.");
+            setShowRequestModal(false);
+        } catch (err) {
+            setRequestMessage("Failed to submit request. Please try again.");
         }
     };
 
@@ -77,8 +105,8 @@ function Roles({ darkMode, setDarkMode }) {
         </label>
     );
 
-    // Form view
-    if (showForm || editingUser) {
+    // Form view (no add user, but keep edit if you want)
+    if (editingUser) {
         return (
             <div className="min-h-screen bg-background-light text-text-default dark:bg-gray-900 dark:text-gray-100 transition-colors">
                 <div className="flex min-h-screen">
@@ -96,19 +124,16 @@ function Roles({ darkMode, setDarkMode }) {
                         </div>
                         <div className="mb-8">
                             <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-                                {editingUser ? 'Edit User' : 'Add New User'}
+                                Edit User
                             </h2>
                             <p className="text-gray-600 dark:text-gray-300">
-                                {editingUser ? 'Update user information' : 'Create a new user account'}
+                                Update user information
                             </p>
                         </div>
                         <UserForm
-                            user={editingUser || undefined}
-                            onSubmit={editingUser ? handleEditUser : handleAddUser}
-                            onCancel={() => {
-                                setShowForm(false);
-                                setEditingUser(null);
-                            }}
+                            user={editingUser}
+                            onSubmit={handleEditUser}
+                            onCancel={() => setEditingUser(null)}
                         />
                     </main>
                 </div>
@@ -140,13 +165,6 @@ function Roles({ darkMode, setDarkMode }) {
                         <p className="text-gray-600 dark:text-gray-300 text-lg">Manage users and their permissions</p>
                     </div>
 
-                    {/* Add User Button */}
-                    <div className="flex justify-end mb-6">
-                        <Button size="sm" color="amber" onClick={() => setShowForm(true)}>
-                            + Add User
-                        </Button>
-                    </div>
-
                     {/* Users Table */}
                     <Card className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-md rounded-xl">
                         <Table className="mt-2">
@@ -155,7 +173,6 @@ function Roles({ darkMode, setDarkMode }) {
                                     <TableHeaderCell className="uppercase text-xs font-semibold text-gray-500 dark:text-gray-400 tracking-wider">Name</TableHeaderCell>
                                     <TableHeaderCell className="uppercase text-xs font-semibold text-gray-500 dark:text-gray-400 tracking-wider">Email</TableHeaderCell>
                                     <TableHeaderCell className="uppercase text-xs font-semibold text-gray-500 dark:text-gray-400 tracking-wider">Role</TableHeaderCell>
-                                    <TableHeaderCell className="uppercase text-xs font-semibold text-gray-500 dark:text-gray-400 tracking-wider">Status</TableHeaderCell>
                                     <TableHeaderCell className="uppercase text-xs font-semibold text-gray-500 dark:text-gray-400 tracking-wider">Actions</TableHeaderCell>
                                 </TableRow>
                             </TableHead>
@@ -167,9 +184,9 @@ function Roles({ darkMode, setDarkMode }) {
                                         <TableCell>
                                             <Badge
                                                 color={
-                                                    user.role === 'Admin'
+                                                    user.role === 'admin'
                                                         ? 'amber'
-                                                        : user.role === 'Analyst'
+                                                        : user.role === 'analyst'
                                                             ? 'yellow'
                                                             : 'gray'
                                                 }
@@ -178,27 +195,24 @@ function Roles({ darkMode, setDarkMode }) {
                                             </Badge>
                                         </TableCell>
                                         <TableCell>
-                                            <Badge color={user.status === 'Active' ? 'green' : 'gray'}>
-                                                {user.status}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="flex space-x-2">
-                                                <button
-                                                    className="p-1 rounded hover:bg-amber-100 dark:hover:bg-amber-900 transition"
-                                                    title="Edit"
-                                                    onClick={() => setEditingUser(user)}
-                                                >
-                                                    <PencilSquareIcon className="w-5 h-5 text-amber-600" />
-                                                </button>
-                                                <button
-                                                    className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900 transition"
-                                                    title="Delete"
-                                                    onClick={() => handleDeleteUser(user.id)}
-                                                >
-                                                    <TrashIcon className="w-5 h-5 text-red-600" />
-                                                </button>
-                                            </div>
+                                            {role === "admin" && (
+                                                <div className="flex space-x-2">
+                                                    <button
+                                                        className="p-1 rounded hover:bg-amber-100 dark:hover:bg-amber-900 transition"
+                                                        title="Edit"
+                                                        onClick={() => setEditingUser(user)}
+                                                    >
+                                                        <PencilSquareIcon className="w-5 h-5 text-amber-600" />
+                                                    </button>
+                                                    <button
+                                                        className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900 transition"
+                                                        title="Delete"
+                                                        onClick={() => handleDeleteUser(user.id)}
+                                                    >
+                                                        <TrashIcon className="w-5 h-5 text-red-600" />
+                                                    </button>
+                                                </div>
+                                            )}
                                         </TableCell>
                                     </TableRow>
                                 ))}
@@ -236,6 +250,59 @@ function Roles({ darkMode, setDarkMode }) {
                             </div>
                         </div>
                     </Card>
+
+                    {/* Request Role Section for Non-Admins */}
+                    {role !== "admin" && (
+                        <div className="mt-12 flex justify-center">
+                            <div className="bg-white dark:bg-gray-800 border border-amber-300 dark:border-amber-600 rounded-xl shadow-lg px-8 py-6 max-w-xl w-full text-center">
+                                <div className="flex flex-col items-center mb-3">
+                                    <svg className="w-8 h-8 text-amber-500 mb-2" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 11c1.104 0 2-.896 2-2s-.896-2-2-2-2 .896-2 2 .896 2 2 2zm0 0v2m0 4h.01M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z" />
+                                    </svg>
+                                    <h3 className="text-lg font-bold text-amber-700 dark:text-amber-300 mb-1">Request Role Change</h3>
+                                </div>
+                                <span className="text-gray-700 dark:text-gray-200 block mb-4">
+                                    Would you like to request a role change? Select your desired role and submit your request. An administrator will review it.
+                                </span>
+                                <button
+                                    className="mt-2 px-4 py-2 bg-yellow-500 text-blue font-semibold rounded hover:bg-amber-600 transition"
+                                    onClick={() => setShowRequestModal(true)}
+                                >
+                                    Request Role Change
+                                </button>
+                                {requestMessage && <div className="mt-3 text-green-600">{requestMessage}</div>}
+                                {showRequestModal && (
+                                    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
+                                        <div className="bg-white dark:bg-gray-800 p-6 rounded shadow-lg w-full max-w-xs">
+                                            <h3 className="text-lg font-semibold mb-4">Request a Role Change</h3>
+                                            <select
+                                                className="w-full mb-4 p-2 border rounded dark:bg-gray-700 dark:text-gray-100"
+                                                value={requestedRole}
+                                                onChange={e => setRequestedRole(e.target.value)}
+                                            >
+                                                <option value="analyst">Analyst</option>
+                                                <option value="admin">Admin</option>
+                                            </select>
+                                            <div className="flex justify-end space-x-2">
+                                                <button
+                                                    className="px-3 py-1 bg-gray-300 dark:bg-gray-600 rounded"
+                                                    onClick={() => setShowRequestModal(false)}
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    className="px-3 py-1 bg-amber-500 text-white rounded"
+                                                    onClick={handleRoleRequest}
+                                                >
+                                                    Submit
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </main>
             </div>
         </div>

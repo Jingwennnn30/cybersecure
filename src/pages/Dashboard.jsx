@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Card, Title, Text, Grid, Metric, AreaChart, DonutChart } from '@tremor/react';
 import Navigation from '../components/Navigation';
-import { SunIcon, MoonIcon, LinkIcon } from '@heroicons/react/24/solid';
+import { SunIcon, MoonIcon, LinkIcon, BellIcon, XMarkIcon } from '@heroicons/react/24/solid';
 import AIChatbot from '../components/AIChatbot';
+import { collection, getDocs, updateDoc, doc } from "firebase/firestore";
+import { db } from "../firebase";
+import { useRole } from '../contexts/RoleContext';
 
 // Telegram SVG icon (since Heroicons doesn't have Telegram)
 const TelegramIcon = (props) => (
@@ -111,6 +114,46 @@ function Dashboard({ darkMode, setDarkMode }) {
     }
   };
 
+  // --- Role Request Notification Logic ---
+  const role = useRole();
+  const [showNotifPanel, setShowNotifPanel] = useState(false);
+  const [roleRequests, setRoleRequests] = useState([]);
+
+  // Fetch pending role requests for admin
+  useEffect(() => {
+    if (role === "admin") {
+      const fetchRequests = async () => {
+        const querySnapshot = await getDocs(collection(db, "roleRequests"));
+        const requests = querySnapshot.docs
+          .map(doc => ({ id: doc.id, ...doc.data() }))
+          .filter(req => req.status === "pending");
+        setRoleRequests(requests);
+      };
+      fetchRequests();
+      // Optionally poll for new requests every 10s
+      const interval = setInterval(() => {
+        if (role === "admin") fetchRequests();
+      }, 10000);
+      return () => clearInterval(interval);
+    }
+  }, [role]);
+
+  // Admin approve/reject actions (optional, for quick action in dashboard)
+  const handleApprove = async (req) => {
+    // Update user role in users collection
+    const userRef = doc(db, "users", req.requesterUID);
+    await updateDoc(userRef, { role: req.requestedRole });
+    // Mark request as approved
+    const reqRef = doc(db, "roleRequests", req.id);
+    await updateDoc(reqRef, { status: "approved" });
+    setRoleRequests(prev => prev.filter(r => r.id !== req.id));
+  };
+  const handleReject = async (req) => {
+    const reqRef = doc(db, "roleRequests", req.id);
+    await updateDoc(reqRef, { status: "rejected" });
+    setRoleRequests(prev => prev.filter(r => r.id !== req.id));
+  };
+
   return (
     <div className="min-h-screen bg-background-light dark:bg-gray-900 dark:text-gray-100 transition-colors">
       <div className="flex min-h-screen">
@@ -126,8 +169,73 @@ function Dashboard({ darkMode, setDarkMode }) {
 
         {/* Main Content */}
         <main className={mainClass}>
-          {/* Toggle */}
-          <div className="flex justify-end mb-6">
+          {/* Top bar with toggle and notification bell */}
+          <div className="flex justify-end items-center mb-6 gap-4">
+            {role === "admin" && (
+              <div className="relative">
+                <button
+                  className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                  onClick={() => setShowNotifPanel(!showNotifPanel)}
+                  aria-label="Role Change Requests"
+                >
+                  <BellIcon className="w-6 h-6 text-amber-500" />
+                  {roleRequests.length > 0 && (
+                    <span className="absolute top-0 right-0 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-red-600 rounded-full">
+                      {roleRequests.length}
+                    </span>
+                  )}
+                </button>
+                {/* Notification Side Panel */}
+                {showNotifPanel && (
+                  <div className="fixed top-0 right-0 w-full max-w-sm h-full bg-white dark:bg-gray-900 shadow-2xl z-50 border-l border-gray-200 dark:border-gray-700 flex flex-col">
+                    <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+                      <Title className="text-lg">Notifications</Title>
+                      <button
+                        className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
+                        onClick={() => setShowNotifPanel(false)}
+                        aria-label="Close"
+                      >
+                        <XMarkIcon className="w-6 h-6" />
+                      </button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-4">
+                      {roleRequests.length === 0 ? (
+                        <Text className="text-gray-500 dark:text-gray-400">No messages</Text>
+                      ) : (
+                        roleRequests.map((req) => (
+                          <Card key={req.id} className="mb-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                            <div>
+                              <Text className="font-semibold mb-2">Role Change Request</Text>
+                              <Text><b>Name:</b> {req.name || "-"}</Text>
+                              <Text><b>Email:</b> {req.email}</Text>
+                              <Text><b>Current Role:</b> {req.currentRole}</Text>
+                              <Text><b>Requested Role:</b> {req.requestedRole}</Text>
+                              <Text className="text-xs text-gray-400 mt-1">
+                                {req.timestamp?.toDate ? req.timestamp.toDate().toLocaleString() : ""}
+                              </Text>
+                            </div>
+                            <div className="flex gap-2 mt-3">
+                              <button
+                                className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600"
+                                onClick={() => handleApprove(req)}
+                              >
+                                Approve
+                              </button>
+                              <button
+                                className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600"
+                                onClick={() => handleReject(req)}
+                              >
+                                Reject
+                              </button>
+                            </div>
+                          </Card>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             {Toggle}
           </div>
 
