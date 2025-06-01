@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, Title, Text, TextInput, Select, SelectItem, Button } from '@tremor/react';
 import Navigation from '../components/Navigation';
+import { doc, setDoc, getDoc } from "firebase/firestore";
+import { db } from "../firebase";
 
 function Config({ darkMode, setDarkMode }) {
     // Sidebar and main content styling
     const sidebarClass = "w-72 bg-white dark:bg-gray-900 p-6 shadow-xl border-r border-gray-200 dark:border-gray-800 fixed h-screen flex flex-col";
-    // Add extra padding-left to mainClass for spacing between sidebar and content
     const mainClass = "flex-1 pl-80 p-8 overflow-auto bg-background-light dark:bg-gray-900 transition-colors min-h-screen";
 
     // Toggle switch (standardized position)
@@ -44,6 +45,76 @@ function Config({ darkMode, setDarkMode }) {
         </label>
     );
 
+    // Telegram settings state
+    const [telegramBotToken, setTelegramBotToken] = useState('');
+    const [telegramChannelId, setTelegramChannelId] = useState('');
+    const [saving, setSaving] = useState(false);
+    const [saveMsg, setSaveMsg] = useState('');
+
+    // Email settings state
+    const [smtpServer, setSmtpServer] = useState('');
+    const [smtpPort, setSmtpPort] = useState('');
+    const [emailFrom, setEmailFrom] = useState('');
+    const [emailPassword, setEmailPassword] = useState('');
+    const [savingEmail, setSavingEmail] = useState(false);
+    const [saveEmailMsg, setSaveEmailMsg] = useState('');
+
+    // Load existing settings on mount
+    useEffect(() => {
+        const fetchSettings = async () => {
+            try {
+                const docRef = doc(db, "config", "system");
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    setTelegramBotToken(data.telegramBotToken || '');
+                    setTelegramChannelId(data.telegramChannelId || '');
+                    setSmtpServer(data.smtpServer || '');
+                    setSmtpPort(data.smtpPort || '');
+                    setEmailFrom(data.emailFrom || '');
+                    setEmailPassword(data.emailPassword || '');
+                }
+            } catch (err) {
+                setSaveMsg('Error loading settings: ' + err.message);
+            }
+        };
+        fetchSettings();
+    }, []);
+
+    // Save Telegram settings handler
+    const handleSaveTelegram = async () => {
+        setSaving(true);
+        setSaveMsg('');
+        try {
+            await setDoc(doc(db, "config", "system"), {
+                telegramBotToken,
+                telegramChannelId
+            }, { merge: true });
+            setSaveMsg('Saved successfully!');
+        } catch (err) {
+            setSaveMsg('Error saving: ' + err.message);
+        }
+        setSaving(false);
+    };
+
+    // Save Email settings handler
+    const handleSaveEmail = async () => {
+        setSavingEmail(true);
+        setSaveEmailMsg('');
+        try {
+            await setDoc(doc(db, "config", "system"), {
+                smtpServer,
+                smtpPort,
+                emailFrom,
+                emailPassword
+            }, { merge: true });
+            setSaveEmailMsg('Email settings saved!');
+        } catch (err) {
+            setSaveEmailMsg('Error saving: ' + err.message);
+        }
+        setSavingEmail(false);
+    };
+
     return (
         <div className="min-h-screen bg-background-light text-text-default dark:bg-gray-900 dark:text-gray-100 transition-colors">
             <div className="flex min-h-screen">
@@ -64,7 +135,7 @@ function Config({ darkMode, setDarkMode }) {
                         {Toggle}
                     </div>
 
-                    {/* Heading Section - Standardized with Dashboard */}
+                    {/* Heading Section */}
                     <div className="mb-8">
                         <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">System Configuration</h2>
                         <p className="text-gray-600 dark:text-gray-300 text-lg">Manage system settings and integrations</p>
@@ -79,6 +150,8 @@ function Config({ darkMode, setDarkMode }) {
                                 <TextInput
                                     placeholder="Enter your Telegram bot token"
                                     className="mt-2"
+                                    value={telegramBotToken}
+                                    onChange={e => setTelegramBotToken(e.target.value)}
                                 />
                             </div>
                             <div>
@@ -86,9 +159,23 @@ function Config({ darkMode, setDarkMode }) {
                                 <TextInput
                                     placeholder="Enter your Telegram channel ID"
                                     className="mt-2"
+                                    value={telegramChannelId}
+                                    onChange={e => setTelegramChannelId(e.target.value)}
                                 />
                             </div>
-                            <Button size="sm" color="amber">Save Telegram Settings</Button>
+                            <Button
+                                size="sm"
+                                color="blue"
+                                onClick={handleSaveTelegram}
+                                loading={saving}
+                            >
+                                Save Telegram Settings
+                            </Button>
+                            {saveMsg && (
+                                <div className="mt-2 text-sm" style={{ color: saveMsg.startsWith('Error') ? 'red' : 'green' }}>
+                                    {saveMsg}
+                                </div>
+                            )}
                         </div>
                     </Card>
 
@@ -101,6 +188,8 @@ function Config({ darkMode, setDarkMode }) {
                                 <TextInput
                                     placeholder="smtp.example.com"
                                     className="mt-2"
+                                    value={smtpServer}
+                                    onChange={e => setSmtpServer(e.target.value)}
                                 />
                             </div>
                             <div>
@@ -109,6 +198,8 @@ function Config({ darkMode, setDarkMode }) {
                                     placeholder="587"
                                     type="number"
                                     className="mt-2"
+                                    value={smtpPort}
+                                    onChange={e => setSmtpPort(e.target.value)}
                                 />
                             </div>
                             <div>
@@ -117,9 +208,33 @@ function Config({ darkMode, setDarkMode }) {
                                     placeholder="security@yourdomain.com"
                                     type="email"
                                     className="mt-2"
+                                    value={emailFrom}
+                                    onChange={e => setEmailFrom(e.target.value)}
                                 />
                             </div>
-                            <Button size="sm" color="amber">Save Email Settings</Button>
+                            <div>
+                                <Text className="text-gray-700 dark:text-gray-200">Email Password</Text>
+                                <TextInput
+                                    placeholder="Your email password or app password"
+                                    type="password"
+                                    className="mt-2"
+                                    value={emailPassword}
+                                    onChange={e => setEmailPassword(e.target.value)}
+                                />
+                            </div>
+                            <Button
+                                size="sm"
+                                color="indigo"
+                                onClick={handleSaveEmail}
+                                loading={savingEmail}
+                            >
+                                Save Email Settings
+                            </Button>
+                            {saveEmailMsg && (
+                                <div className="mt-2 text-sm" style={{ color: saveEmailMsg.startsWith('Error') ? 'red' : 'green' }}>
+                                    {saveEmailMsg}
+                                </div>
+                            )}
                         </div>
                     </Card>
 
