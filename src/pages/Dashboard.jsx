@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, Title, Text, Grid, Metric, AreaChart, DonutChart } from '@tremor/react';
 import Navigation from '../components/Navigation';
 import { SunIcon, MoonIcon, LinkIcon, BellIcon, XMarkIcon } from '@heroicons/react/24/solid';
+import { EnvelopeIcon } from '@heroicons/react/24/outline';
 import AIChatbot from '../components/AIChatbot';
 import { collection, getDocs, updateDoc, doc } from "firebase/firestore";
 import { db } from "../firebase";
@@ -154,6 +155,25 @@ function Dashboard({ darkMode, setDarkMode }) {
     setRoleRequests(prev => prev.filter(r => r.id !== req.id));
   };
 
+  // --- Notification Recipients Panel State ---
+  const [showRecipientsPanel, setShowRecipientsPanel] = useState(false);
+  const [recipients, setRecipients] = useState([]);
+  const [loadingRecipients, setLoadingRecipients] = useState(false);
+
+  // Fetch notification recipients from backend
+  const handleShowRecipients = async () => {
+    setShowRecipientsPanel(true);
+    setLoadingRecipients(true);
+    try {
+      const res = await fetch('http://localhost:4000/get-notification-recipients');
+      const data = await res.json();
+      setRecipients(Array.isArray(data.users) ? data.users : []);
+    } catch (err) {
+      setRecipients([]);
+    }
+    setLoadingRecipients(false);
+  };
+
   return (
     <div className="min-h-screen bg-background-light dark:bg-gray-900 dark:text-gray-100 transition-colors">
       <div className="flex min-h-screen">
@@ -169,8 +189,18 @@ function Dashboard({ darkMode, setDarkMode }) {
 
         {/* Main Content */}
         <main className={mainClass}>
-          {/* Top bar with toggle and notification bell */}
+          {/* Top bar with toggle, notification bell, and recipients icon */}
           <div className="flex justify-end items-center mb-6 gap-4">
+            {/* Notification Recipients Icon (visible to all users) */}
+            <button
+              className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors relative"
+              onClick={handleShowRecipients}
+              aria-label="Show email notification recipients"
+              title="Show email notification recipients"
+            >
+              <EnvelopeIcon className="w-6 h-6 text-blue-500" />
+            </button>
+            {/* Notification Bell (admin only) */}
             {role === "admin" && (
               <div className="relative">
                 <button
@@ -238,6 +268,60 @@ function Dashboard({ darkMode, setDarkMode }) {
             )}
             {Toggle}
           </div>
+
+          {/* Notification Recipients Side Panel */}
+          {showRecipientsPanel && (
+            <div className="fixed top-0 right-0 w-full max-w-md h-full bg-white dark:bg-gray-900 shadow-2xl z-50 border-l border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-300">
+              <div className="flex items-center justify-between p-5 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+                <span className="text-lg font-bold tracking-tight text-gray-900 dark:text-gray-100">
+                  Email Notification Recipients
+                </span>
+                <button
+                  className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
+                  onClick={() => setShowRecipientsPanel(false)}
+                  aria-label="Close"
+                >
+                  <XMarkIcon className="w-6 h-6" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6 bg-gray-50 dark:bg-gray-900">
+                {loadingRecipients ? (
+                  <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
+                    <svg className="animate-spin h-5 w-5 mr-3 text-blue-500" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                    </svg>
+                    Loading...
+                  </div>
+                ) : recipients.length === 0 ? (
+                  <span className="text-gray-500 dark:text-gray-400">No recipients found</span>
+                ) : (
+                  <ul className="space-y-4">
+                    {recipients.map((user, idx) => (
+                      <li key={idx} className="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-4 flex items-center gap-4">
+                        <div className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-blue-600 dark:text-blue-300 font-bold text-lg uppercase">
+                          {user.name ? user.name.charAt(0) : user.email.charAt(0)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-gray-900 dark:text-gray-100 truncate">{user.name || user.email}</span>
+                            <span className={`ml-2 px-2 py-0.5 rounded text-xs font-medium
+                              ${user.role === "admin"
+                                ? "bg-blue-100 text-blue-700 dark:bg-blue-800 dark:text-blue-200"
+                                : "bg-green-100 text-green-700 dark:bg-green-800 dark:text-green-200"
+                              }`}>
+                              {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+                            </span>
+                          </div>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">{user.email}</span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Heading */}
           <div className="mb-8">
