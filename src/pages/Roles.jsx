@@ -291,7 +291,7 @@ function Roles({ darkMode, setDarkMode }) {
                                                     Cancel
                                                 </button>
                                                 <button
-                                                    className="px-3 py-1 bg-amber-500 text-white rounded"
+                                                    className="px-3 py-1 bg-yellow-500 text-white rounded"
                                                     onClick={handleRoleRequest}
                                                 >
                                                     Submit

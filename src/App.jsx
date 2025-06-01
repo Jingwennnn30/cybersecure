@@ -9,13 +9,45 @@ import Reports from './pages/Reports';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import ForgotPassword from './pages/ForgotPassword';
-import { auth } from './firebase';
+import { auth, db } from './firebase';
 import { useAuthState } from 'react-firebase-hooks/auth';
+import { doc, getDoc } from 'firebase/firestore';
 
 function PrivateRoute({ children }) {
   const [user, loading] = useAuthState(auth);
   if (loading) return <div>Loading...</div>;
   return user ? children : <Navigate to="/login" />;
+}
+
+// RoleProtectedRoute: Only allows users with the required role(s)
+function RoleProtectedRoute({ allowedRoles, children }) {
+  const [user, loading] = useAuthState(auth);
+  // Try to get role from sessionStorage first
+  const [role, setRole] = useState(() => sessionStorage.getItem('userRole'));
+  const [roleLoading, setRoleLoading] = useState(!role);
+
+  useEffect(() => {
+    const fetchRole = async () => {
+      if (user && !role) {
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (userDoc.exists()) {
+          const fetchedRole = userDoc.data().role;
+          setRole(fetchedRole);
+          sessionStorage.setItem('userRole', fetchedRole);
+        }
+        setRoleLoading(false);
+      } else {
+        setRoleLoading(false);
+      }
+    };
+    fetchRole();
+  }, [user, role]);
+
+  if (loading || roleLoading) return <div>Loading...</div>;
+  if (!user) return <Navigate to="/login" />;
+  if (!allowedRoles.includes(role)) return <Navigate to="/" />;
+
+  return children;
 }
 
 function App() {
@@ -61,9 +93,9 @@ function App() {
       <Route
         path="/config"
         element={
-          <PrivateRoute>
+          <RoleProtectedRoute allowedRoles={['admin']}>
             <Config darkMode={darkMode} setDarkMode={setDarkMode} />
-          </PrivateRoute>
+          </RoleProtectedRoute>
         }
       />
       <Route
