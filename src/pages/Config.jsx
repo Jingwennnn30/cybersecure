@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Title, Text, TextInput, Select, SelectItem, Button } from '@tremor/react';
-import Navigation from '../components/Navigation';
 import { doc, setDoc, getDoc } from "firebase/firestore";
+import Navigation from '../components/Navigation';
 import { db } from "../firebase";
 
 function Config({ darkMode, setDarkMode }) {
@@ -50,6 +50,7 @@ function Config({ darkMode, setDarkMode }) {
     const [telegramChannelId, setTelegramChannelId] = useState('');
     const [saving, setSaving] = useState(false);
     const [saveMsg, setSaveMsg] = useState('');
+    const [editTelegram, setEditTelegram] = useState(false);
 
     // Email settings state
     const [smtpServer, setSmtpServer] = useState('');
@@ -58,6 +59,11 @@ function Config({ darkMode, setDarkMode }) {
     const [emailPassword, setEmailPassword] = useState('');
     const [savingEmail, setSavingEmail] = useState(false);
     const [saveEmailMsg, setSaveEmailMsg] = useState('');
+    const [editEmail, setEditEmail] = useState(false);
+
+    // Store original values for cancel
+    const [originalTelegram, setOriginalTelegram] = useState({});
+    const [originalEmail, setOriginalEmail] = useState({});
 
     // Load existing settings on mount
     useEffect(() => {
@@ -73,6 +79,16 @@ function Config({ darkMode, setDarkMode }) {
                     setSmtpPort(data.smtpPort || '');
                     setEmailFrom(data.emailFrom || '');
                     setEmailPassword(data.emailPassword || '');
+                    setOriginalTelegram({
+                        telegramBotToken: data.telegramBotToken || '',
+                        telegramChannelId: data.telegramChannelId || ''
+                    });
+                    setOriginalEmail({
+                        smtpServer: data.smtpServer || '',
+                        smtpPort: data.smtpPort || '',
+                        emailFrom: data.emailFrom || '',
+                        emailPassword: data.emailPassword || ''
+                    });
                 }
             } catch (err) {
                 setSaveMsg('Error loading settings: ' + err.message);
@@ -91,6 +107,8 @@ function Config({ darkMode, setDarkMode }) {
                 telegramChannelId
             }, { merge: true });
             setSaveMsg('Saved successfully!');
+            setEditTelegram(false);
+            setOriginalTelegram({ telegramBotToken, telegramChannelId });
         } catch (err) {
             setSaveMsg('Error saving: ' + err.message);
         }
@@ -109,11 +127,43 @@ function Config({ darkMode, setDarkMode }) {
                 emailPassword
             }, { merge: true });
             setSaveEmailMsg('Email settings saved!');
+            setEditEmail(false);
+            setOriginalEmail({ smtpServer, smtpPort, emailFrom, emailPassword });
         } catch (err) {
             setSaveEmailMsg('Error saving: ' + err.message);
         }
         setSavingEmail(false);
     };
+
+    // Cancel edit handlers
+    const handleCancelTelegram = () => {
+        setTelegramBotToken(originalTelegram.telegramBotToken);
+        setTelegramChannelId(originalTelegram.telegramChannelId);
+        setEditTelegram(false);
+        setSaveMsg('');
+    };
+    const handleCancelEmail = () => {
+        setSmtpServer(originalEmail.smtpServer);
+        setSmtpPort(originalEmail.smtpPort);
+        setEmailFrom(originalEmail.emailFrom);
+        setEmailPassword(originalEmail.emailPassword);
+        setEditEmail(false);
+        setSaveEmailMsg('');
+    };
+
+    // Edit icon SVG
+    const EditIcon = (
+        <button
+            className="ml-2 text-gray-500 hover:text-blue-600 focus:outline-none"
+            aria-label="Edit"
+            tabIndex={0}
+            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+        >
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a4 4 0 01-2.828 1.172H7v-2a4 4 0 011.172-2.828z" />
+            </svg>
+        </button>
+    );
 
     return (
         <div className="min-h-screen bg-background-light text-text-default dark:bg-gray-900 dark:text-gray-100 transition-colors">
@@ -143,34 +193,63 @@ function Config({ darkMode, setDarkMode }) {
 
                     {/* Webhook Settings */}
                     <Card className="mb-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
-                        <Title className="text-gray-900 dark:text-gray-100">Webhook Configurations</Title>
+                        <div className="flex items-center justify-between">
+                            <Title className="text-gray-900 dark:text-gray-100">Webhook Configurations</Title>
+                            {!editTelegram && (
+                                <span onClick={() => setEditTelegram(true)}>{EditIcon}</span>
+                            )}
+                        </div>
                         <div className="mt-4 space-y-4">
                             <div>
                                 <Text className="text-gray-700 dark:text-gray-200">Telegram Bot Token</Text>
-                                <TextInput
-                                    placeholder="Enter your Telegram bot token"
-                                    className="mt-2"
-                                    value={telegramBotToken}
-                                    onChange={e => setTelegramBotToken(e.target.value)}
-                                />
+                                {editTelegram ? (
+                                    <TextInput
+                                        placeholder="Enter your Telegram bot token"
+                                        className="mt-2"
+                                        value={telegramBotToken}
+                                        onChange={e => setTelegramBotToken(e.target.value)}
+                                    />
+                                ) : (
+                                    <div className="mt-2 px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-gray-800 dark:text-gray-200 break-all">
+                                        {telegramBotToken ? '••••••••' : <span className="text-gray-400">Not set</span>}
+                                    </div>
+                                )}
                             </div>
                             <div>
                                 <Text className="text-gray-700 dark:text-gray-200">Telegram Channel ID</Text>
-                                <TextInput
-                                    placeholder="Enter your Telegram channel ID"
-                                    className="mt-2"
-                                    value={telegramChannelId}
-                                    onChange={e => setTelegramChannelId(e.target.value)}
-                                />
+                                {editTelegram ? (
+                                    <TextInput
+                                        placeholder="Enter your Telegram channel ID"
+                                        className="mt-2"
+                                        value={telegramChannelId}
+                                        onChange={e => setTelegramChannelId(e.target.value)}
+                                    />
+                                ) : (
+                                    <div className="mt-2 px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-gray-800 dark:text-gray-200 break-all">
+                                        {telegramChannelId ? '••••••••' : <span className="text-gray-400">Not set</span>}
+                                    </div>
+                                )}
                             </div>
-                            <Button
-                                size="sm"
-                                color="blue"
-                                onClick={handleSaveTelegram}
-                                loading={saving}
-                            >
-                                Save Telegram Settings
-                            </Button>
+                            {editTelegram && (
+                                <div className="flex gap-2 mt-2">
+                                    <Button
+                                        size="sm"
+                                        color="blue"
+                                        onClick={handleSaveTelegram}
+                                        loading={saving}
+                                    >
+                                        Save Telegram Settings
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        color="gray"
+                                        onClick={handleCancelTelegram}
+                                        disabled={saving}
+                                    >
+                                        Cancel
+                                    </Button>
+                                </div>
+                            )}
                             {saveMsg && (
                                 <div className="mt-2 text-sm" style={{ color: saveMsg.startsWith('Error') ? 'red' : 'green' }}>
                                     {saveMsg}
@@ -181,55 +260,96 @@ function Config({ darkMode, setDarkMode }) {
 
                     {/* Email Settings */}
                     <Card className="mb-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
-                        <Title className="text-gray-900 dark:text-gray-100">Email Notifications</Title>
+                        <div className="flex items-center justify-between">
+                            <Title className="text-gray-900 dark:text-gray-100">Email Notifications</Title>
+                            {!editEmail && (
+                                <span onClick={() => setEditEmail(true)}>{EditIcon}</span>
+                            )}
+                        </div>
                         <div className="mt-4 space-y-4">
                             <div>
                                 <Text className="text-gray-700 dark:text-gray-200">SMTP Server</Text>
-                                <TextInput
-                                    placeholder="smtp.example.com"
-                                    className="mt-2"
-                                    value={smtpServer}
-                                    onChange={e => setSmtpServer(e.target.value)}
-                                />
+                                {editEmail ? (
+                                    <TextInput
+                                        placeholder="smtp.example.com"
+                                        className="mt-2"
+                                        value={smtpServer}
+                                        onChange={e => setSmtpServer(e.target.value)}
+                                    />
+                                ) : (
+                                    <div className="mt-2 px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-gray-800 dark:text-gray-200 break-all">
+                                        {smtpServer || <span className="text-gray-400">Not set</span>}
+                                    </div>
+                                )}
                             </div>
                             <div>
                                 <Text className="text-gray-700 dark:text-gray-200">SMTP Port</Text>
-                                <TextInput
-                                    placeholder="587"
-                                    type="number"
-                                    className="mt-2"
-                                    value={smtpPort}
-                                    onChange={e => setSmtpPort(e.target.value)}
-                                />
+                                {editEmail ? (
+                                    <TextInput
+                                        placeholder="587"
+                                        type="number"
+                                        className="mt-2"
+                                        value={smtpPort}
+                                        onChange={e => setSmtpPort(e.target.value)}
+                                    />
+                                ) : (
+                                    <div className="mt-2 px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-gray-800 dark:text-gray-200 break-all">
+                                        {smtpPort || <span className="text-gray-400">Not set</span>}
+                                    </div>
+                                )}
                             </div>
                             <div>
                                 <Text className="text-gray-700 dark:text-gray-200">Email From</Text>
-                                <TextInput
-                                    placeholder="security@yourdomain.com"
-                                    type="email"
-                                    className="mt-2"
-                                    value={emailFrom}
-                                    onChange={e => setEmailFrom(e.target.value)}
-                                />
+                                {editEmail ? (
+                                    <TextInput
+                                        placeholder="security@yourdomain.com"
+                                        type="email"
+                                        className="mt-2"
+                                        value={emailFrom}
+                                        onChange={e => setEmailFrom(e.target.value)}
+                                    />
+                                ) : (
+                                    <div className="mt-2 px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-gray-800 dark:text-gray-200 break-all">
+                                        {emailFrom || <span className="text-gray-400">Not set</span>}
+                                    </div>
+                                )}
                             </div>
                             <div>
                                 <Text className="text-gray-700 dark:text-gray-200">Email Password</Text>
-                                <TextInput
-                                    placeholder="Your email password or app password"
-                                    type="password"
-                                    className="mt-2"
-                                    value={emailPassword}
-                                    onChange={e => setEmailPassword(e.target.value)}
-                                />
+                                {editEmail ? (
+                                    <TextInput
+                                        placeholder="Your email password or app password"
+                                        type="password"
+                                        className="mt-2"
+                                        value={emailPassword}
+                                        onChange={e => setEmailPassword(e.target.value)}
+                                    />
+                                ) : (
+                                    <div className="mt-2 px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-gray-800 dark:text-gray-200 break-all">
+                                        {emailPassword ? '••••••••' : <span className="text-gray-400">Not set</span>}
+                                    </div>
+                                )}
                             </div>
-                            <Button
-                                size="sm"
-                                color="indigo"
-                                onClick={handleSaveEmail}
-                                loading={savingEmail}
-                            >
-                                Save Email Settings
-                            </Button>
+                            {editEmail && (
+                                <div className="flex gap-2 mt-2">
+                                    <Button
+                                        size="sm"
+                                        color="indigo"
+                                        onClick={handleSaveEmail}
+                                        loading={savingEmail}
+                                    >
+                                        Save Email Settings
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        color="gray"
+                                        onClick={handleCancelEmail}
+                                        disabled={savingEmail}
+                                    >
+                                        Cancel
+                                    </Button>
+                                </div>
+                            )}
                             {saveEmailMsg && (
                                 <div className="mt-2 text-sm" style={{ color: saveEmailMsg.startsWith('Error') ? 'red' : 'green' }}>
                                     {saveEmailMsg}

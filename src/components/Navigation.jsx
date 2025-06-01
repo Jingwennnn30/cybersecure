@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   HomeIcon,
@@ -10,7 +10,9 @@ import {
   ArrowRightOnRectangleIcon,
 } from '@heroicons/react/24/outline';
 import { signOut } from "firebase/auth";
-import { auth } from "../firebase";
+import { auth, db } from "../firebase";
+import { useAuthState } from 'react-firebase-hooks/auth';
+import { doc, getDoc } from 'firebase/firestore';
 
 const navigation = [
   {
@@ -35,7 +37,8 @@ const navigation = [
     name: 'Configuration',
     href: '/config',
     icon: CogIcon,
-    description: 'System settings'
+    description: 'System settings',
+    adminOnly: true
   },
   {
     name: 'Role Management',
@@ -54,11 +57,31 @@ const navigation = [
 function Navigation() {
   const location = useLocation();
   const navigate = useNavigate();
+  const [user] = useAuthState(auth);
+  const [role, setRole] = useState(() => sessionStorage.getItem('userRole'));
+
+  useEffect(() => {
+    const fetchRole = async () => {
+      if (user) {
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (userDoc.exists()) {
+          const fetchedRole = userDoc.data().role;
+          setRole(fetchedRole);
+          sessionStorage.setItem('userRole', fetchedRole);
+        }
+      } else {
+        setRole(null);
+        sessionStorage.removeItem('userRole');
+      }
+    };
+    fetchRole();
+  }, [user]);
 
   const handleLogout = async () => {
     const confirmed = window.confirm("Are you sure you want to log out?");
     if (confirmed) {
       await signOut(auth);
+      sessionStorage.removeItem('userRole');
       navigate("/login");
     }
   };
@@ -66,52 +89,54 @@ function Navigation() {
   return (
     <nav className="space-y-1 px-2 flex flex-col h-full">
       <div className="flex-1">
-        {navigation.map((item) => {
-          const isActive = location.pathname === item.href;
-          return (
-            <Link
-              key={item.name}
-              to={item.href}
-              className={`
-                group relative flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200
-                ${isActive
-                  ? 'bg-amber-500 text-black shadow-lg'
-                  : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'
-                }
-              `}
-            >
-              <div className="flex items-center flex-1 min-w-0">
-                <item.icon
-                  className={`
-                    mr-3 h-5 w-5 flex-shrink-0 transition-colors duration-200
-                    ${isActive
-                      ? 'text-black'
-                      : 'text-gray-400 group-hover:text-gray-700'
-                    }
-                  `}
-                  aria-hidden="true"
-                />
-                <div className="flex-1 min-w-0">
-                  <span className="block truncate">{item.name}</span>
-                  <span
+        {navigation
+          .filter(item => !item.adminOnly || role === 'admin')
+          .map((item) => {
+            const isActive = location.pathname === item.href;
+            return (
+              <Link
+                key={item.name}
+                to={item.href}
+                className={`
+                  group relative flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200
+                  ${isActive
+                    ? 'bg-amber-500 text-black shadow-lg'
+                    : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'
+                  }
+                `}
+              >
+                <div className="flex items-center flex-1 min-w-0">
+                  <item.icon
                     className={`
-                      block text-xs truncate transition-opacity duration-200
-                      ${isActive ? 'text-black opacity-100' : 'text-gray-400 group-hover:text-gray-700 opacity-75'}
+                      mr-3 h-5 w-5 flex-shrink-0 transition-colors duration-200
+                      ${isActive
+                        ? 'text-black'
+                        : 'text-gray-400 group-hover:text-gray-700'
+                      }
                     `}
-                  >
-                    {item.description}
-                  </span>
+                    aria-hidden="true"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <span className="block truncate">{item.name}</span>
+                    <span
+                      className={`
+                        block text-xs truncate transition-opacity duration-200
+                        ${isActive ? 'text-black opacity-100' : 'text-gray-400 group-hover:text-gray-700 opacity-75'}
+                      `}
+                    >
+                      {item.description}
+                    </span>
+                  </div>
                 </div>
-              </div>
-              {isActive && (
-                <span
-                  className="absolute inset-y-0 left-0 w-1 bg-amber-400 rounded-r-full"
-                  aria-hidden="true"
-                />
-              )}
-            </Link>
-          );
-        })}
+                {isActive && (
+                  <span
+                    className="absolute inset-y-0 left-0 w-1 bg-amber-400 rounded-r-full"
+                    aria-hidden="true"
+                  />
+                )}
+              </Link>
+            );
+          })}
       </div>
       {/* Logout button at the bottom */}
       <button
