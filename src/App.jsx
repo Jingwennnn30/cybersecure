@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
+import Alerts from './pages/Alerts';
 import HistoricalAlerts from './pages/HistoricalAlerts';
 import AIInsights from './pages/AI-insights';
 import Config from './pages/Config';
@@ -74,6 +75,23 @@ function App() {
           </PrivateRoute>
         }
       />
+      <Route
+        path="/alerts"
+        element={
+          <PrivateRoute>
+            <Alerts darkMode={darkMode} setDarkMode={setDarkMode} />
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/alerts"
+        element={
+          <PrivateRoute>
+            <Alerts darkMode={darkMode} setDarkMode={setDarkMode} />
+          </PrivateRoute>
+        }
+      />
+
       <Route
         path="/historical"
         element={
