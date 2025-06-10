@@ -22,6 +22,12 @@ const navigation = [
     description: 'Overview and key metrics'
   },
   {
+    name: 'Alerts',
+    href: '/alerts',
+    icon: ChartBarIcon, // or any icon you like
+    description: 'View security alerts'
+  },
+  {
     name: 'Historical Alerts',
     href: '/historical',
     icon: ChartBarIcon,
