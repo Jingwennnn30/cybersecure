@@ -9,6 +9,7 @@
     "eject": "react-scripts eject"
   },
   "dependencies": {
+    "@clickhouse/client": "^1.11.2",
     "@headlessui/react": "^2.2.4",
     "@heroicons/react": "^2.2.0",
     "@tremor/react": "^3.18.7",
@@ -23,6 +24,7 @@
     "react-firebase-hooks": "^5.1.1",
     "react-router-dom": "^7.6.1",
     "react-scripts": "^5.0.1",
+    "recharts": "^2.15.3",
     "tailwindcss": "^2.2.19"
   },
   "devDependencies": {
