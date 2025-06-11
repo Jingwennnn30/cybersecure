@@ -36,7 +36,7 @@ function Dashboard({ darkMode, setDarkMode }) {
   const mainClass = "flex-1 pl-80 p-8 overflow-auto bg-background-light dark:bg-gray-900 transition-colors min-h-screen";
 
   // Telegram
-  const telegramLink = "https://t.me/+oO1pnXg2Qh00ZDY1";
+  const telegramLink = "https://t.me/+ecL0Fe0dTntkN2Nl";
   const [copied, setCopied] = useState(false);
   const handleCopy = () => {
     navigator.clipboard.writeText(telegramLink);
@@ -329,33 +329,33 @@ function Dashboard({ darkMode, setDarkMode }) {
             <p className="text-gray-600 dark:text-gray-300 text-lg">Real-time security monitoring and analysis</p>
           </div>
 
-          {/* Telegram Channel Section */}
+          {/* Telegram Group Section */}
           <div className="flex items-center gap-3 mb-6">
             <a
               href={telegramLink}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white transition-colors"
-              title="Open Telegram Channel"
+              title="Open Telegram Group"
             >
               <TelegramIcon className="w-5 h-5" />
-              <span className="font-medium">Telegram Channel</span>
+              <span className="font-medium">Telegram Group</span>
             </a>
             <button
               onClick={handleCopy}
               className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-              title="Copy Telegram Channel Link"
+              title="Copy Telegram Group Link"
               type="button"
             >
               <LinkIcon className="w-5 h-5 text-blue-500" />
             </button>
             {copied && (
               <span className="ml-2 text-xs text-green-600 dark:text-green-400 bg-white dark:bg-gray-800 px-2 py-1 rounded shadow">
-                Copied the telegram channel invite link
+                Copied the telegram group invite link
               </span>
             )}
           </div>
-          {/* End Telegram Channel Section */}
+          {/* End Telegram Group Section */}
 
           {/* Stats Grid */}
           <Grid numItems={1} numItemsSm={2} numItemsLg={4} className="gap-6 mb-6">
