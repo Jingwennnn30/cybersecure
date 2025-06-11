@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Title, Text, Grid, Metric, AreaChart, DonutChart } from '@tremor/react';
+import { Card, Title, Text, Grid, Metric, AreaChart } from '@tremor/react';
 import Navigation from '../components/Navigation';
 import { SunIcon, MoonIcon, LinkIcon, BellIcon, XMarkIcon } from '@heroicons/react/24/solid';
 import { EnvelopeIcon } from '@heroicons/react/24/outline';
@@ -7,6 +7,8 @@ import AIChatbot from '../components/AIChatbot';
 import { collection, getDocs, updateDoc, doc } from "firebase/firestore";
 import { db } from "../firebase";
 import { useRole } from '../contexts/RoleContext';
+import { useNavigate } from 'react-router-dom';
+import { PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
 
 // Telegram SVG icon (since Heroicons doesn't have Telegram)
 const TelegramIcon = (props) => (
@@ -15,28 +17,24 @@ const TelegramIcon = (props) => (
   </svg>
 );
 
-const alertData = [
-  { date: '2024-01', alerts: 234, resolved: 220 },
-  { date: '2024-02', alerts: 278, resolved: 260 },
-  { date: '2024-03', alerts: 189, resolved: 180 },
-  { date: '2024-04', alerts: 245, resolved: 230 },
-  { date: '2024-05', alerts: 215, resolved: 205 },
-  { date: '2024-06', alerts: 290, resolved: 275 },
-];
-
-const severityData = [
-  { name: 'Critical', value: 15 },
-  { name: 'High', value: 45 },
-  { name: 'Medium', value: 120 },
-  { name: 'Low', value: 180 },
-];
+// --- Real Data State ---
+const initialStats = {
+  alertsToday: 0,
+  criticalAlerts: 0,
+  aiProcessed: 0,
+  aiAnalyzed: 0,
+  systemHealth: "Unknown",
+  alertsChange: 0,
+  alertTrends: [],
+  severityDist: [],
+};
 
 function Dashboard({ darkMode, setDarkMode }) {
   const sidebarClass = "w-72 bg-white dark:bg-gray-900 p-6 shadow-xl border-r border-gray-200 dark:border-gray-800 fixed h-screen flex flex-col";
   const mainClass = "flex-1 pl-80 p-8 overflow-auto bg-background-light dark:bg-gray-900 transition-colors min-h-screen";
 
   // Telegram
-  const telegramLink = "https://t.me/+oO1pnXg2Qh00ZDY1";
+  const telegramLink = "https://t.me/+ecL0Fe0dTntkN2Nl";
   const [copied, setCopied] = useState(false);
   const handleCopy = () => {
     navigator.clipboard.writeText(telegramLink);
@@ -44,14 +42,43 @@ function Dashboard({ darkMode, setDarkMode }) {
     setTimeout(() => setCopied(false), 1500);
   };
 
+  // --- Dashboard Stats State ---
+  const [stats, setStats] = useState(initialStats);
+
+  // Fetch dashboard stats from backend
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const res = await fetch('http://localhost:4000/api/dashboard-stats');
+        if (res.ok) {
+          const data = await res.json();
+          setStats({
+            alertsToday: data.alertsToday || 0,
+            criticalAlerts: data.criticalAlerts || 0,
+            aiProcessed: data.aiProcessed || 0,
+            aiAnalyzed: data.aiAnalyzed || 0,
+            systemHealth: data.systemHealth || "Unknown",
+            alertsChange: data.alertsChange || 0,
+            alertTrends: Array.isArray(data.alertTrends) ? data.alertTrends : [],
+            severityDist: Array.isArray(data.severityDist) ? data.severityDist : [],
+          });
+        }
+      } catch (err) {
+        // Optionally handle error
+      }
+    };
+    fetchStats();
+  }, []);
+
   // Live Alerts state
   const [liveAlerts, setLiveAlerts] = useState([]);
+  const [selectedAlert, setSelectedAlert] = useState(null);
 
   // Fetch live alerts from backend every 5 seconds
   useEffect(() => {
     const fetchAlerts = async () => {
       try {
-        const res = await fetch('http://localhost:4000/api/live-alerts'); // Change to your backend URL if needed
+        const res = await fetch('http://localhost:4000/api/alerts');
         if (res.ok) {
           const data = await res.json();
           setLiveAlerts(Array.isArray(data) ? data : []);
@@ -103,17 +130,28 @@ function Dashboard({ darkMode, setDarkMode }) {
   // Helper for badge color
   const getSeverityBadge = (severity) => {
     switch (severity?.toLowerCase()) {
-      case 'high':
       case 'critical':
-        return 'bg-danger';
+        return 'bg-red-600';
+      case 'high':
+        return 'bg-amber-500';
       case 'medium':
-        return 'bg-warning';
+        return 'bg-yellow-400 text-gray-900';
       case 'low':
-        return 'bg-success';
+        return 'bg-green-600';
       default:
         return 'bg-gray-400';
     }
   };
+
+  // Count alerts by severity for summary
+  const severitySummary = liveAlerts.reduce(
+    (acc, alert) => {
+      const sev = alert.severity?.toLowerCase();
+      if (sev && acc[sev] !== undefined) acc[sev]++;
+      return acc;
+    },
+    { critical: 0, high: 0, medium: 0, low: 0 }
+  );
 
   // --- Role Request Notification Logic ---
   const role = useRole();
@@ -173,6 +211,21 @@ function Dashboard({ darkMode, setDarkMode }) {
     }
     setLoadingRecipients(false);
   };
+
+  const navigate = useNavigate();
+
+  // --- Severity Color Mapping for PieChart ---
+  const severityColors = {
+    Critical: "#ef4444", // red-500
+    High: "#f59e42",     // orange-400
+    Medium: "#facc15",   // yellow-400
+    Low: "#22c55e",      // green-500
+  };
+
+  const pieData = stats.severityDist.map(item => ({
+    name: item.name,
+    value: item.value,
+  }));
 
   return (
     <div className="min-h-screen bg-background-light dark:bg-gray-900 dark:text-gray-100 transition-colors">
@@ -329,55 +382,59 @@ function Dashboard({ darkMode, setDarkMode }) {
             <p className="text-gray-600 dark:text-gray-300 text-lg">Real-time security monitoring and analysis</p>
           </div>
 
-          {/* Telegram Channel Section */}
+          {/* Telegram Group Section */}
           <div className="flex items-center gap-3 mb-6">
             <a
               href={telegramLink}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white transition-colors"
-              title="Open Telegram Channel"
+              title="Open Telegram Group"
             >
               <TelegramIcon className="w-5 h-5" />
-              <span className="font-medium">Telegram Channel</span>
+              <span className="font-medium">Telegram Group</span>
             </a>
             <button
               onClick={handleCopy}
               className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-              title="Copy Telegram Channel Link"
+              title="Copy Telegram Group Link"
               type="button"
             >
               <LinkIcon className="w-5 h-5 text-blue-500" />
             </button>
             {copied && (
               <span className="ml-2 text-xs text-green-600 dark:text-green-400 bg-white dark:bg-gray-800 px-2 py-1 rounded shadow">
-                Copied the telegram channel invite link
+                Copied the telegram group invite link
               </span>
             )}
           </div>
-          {/* End Telegram Channel Section */}
+          {/* End Telegram Group Section */}
 
           {/* Stats Grid */}
           <Grid numItems={1} numItemsSm={2} numItemsLg={4} className="gap-6 mb-6">
             <Card decoration="top" decorationColor="blue" className="hover:shadow-glow transition-shadow duration-200">
               <Text>Alerts Today</Text>
-              <Metric className="text-primary">24</Metric>
-              <Text className="text-xs text-success-light mt-2">↑ 12% from yesterday</Text>
+              <Metric className="text-primary">{stats.alertsToday}</Metric>
+              <Text className="text-xs text-success-light mt-2">
+                {stats.alertsChange >= 0 ? "↑" : "↓"} {Math.abs(stats.alertsChange)}% from yesterday
+              </Text>
             </Card>
             <Card decoration="top" decorationColor="red" className="hover:shadow-glow transition-shadow duration-200">
               <Text>Critical Alerts</Text>
-              <Metric className="text-danger">3</Metric>
+              <Metric className="text-danger">{stats.criticalAlerts}</Metric>
               <Text className="text-xs text-danger-light mt-2">Requires immediate attention</Text>
             </Card>
             <Card decoration="top" decorationColor="blue" className="hover:shadow-glow transition-shadow duration-200">
               <Text>AI Processed</Text>
-              <Metric className="text-info">98%</Metric>
-              <Text className="text-xs text-info-light mt-2">2,450 alerts analyzed</Text>
+              <Metric className="text-info">{stats.aiProcessed}%</Metric>
+              <Text className="text-xs text-info-light mt-2">{stats.aiAnalyzed} alerts analyzed</Text>
             </Card>
             <Card decoration="top" decorationColor="green" className="hover:shadow-glow transition-shadow duration-200">
               <Text>System Health</Text>
-              <Metric className="text-success">Good</Metric>
-              <Text className="text-xs text-success-light mt-2">All systems operational</Text>
+              <Metric className="text-success">{stats.systemHealth}</Metric>
+              <Text className="text-xs text-success-light mt-2">
+                {stats.systemHealth === "Good" ? "All systems operational" : "Check system status"}
+              </Text>
             </Card>
           </Grid>
 
@@ -388,10 +445,10 @@ function Dashboard({ darkMode, setDarkMode }) {
               <Text className="mt-2 text-gray-500 dark:text-gray-300">6-month alert history and resolution rate</Text>
               <AreaChart
                 className="mt-6 h-72"
-                data={alertData}
+                data={stats.alertTrends}
                 index="date"
-                categories={["alerts", "resolved"]}
-                colors={["blue", "green"]}
+                categories={["alerts"]}
+                colors={["blue"]}
                 valueFormatter={(number) => number.toString()}
                 showAnimation={true}
                 showLegend={true}
@@ -403,77 +460,187 @@ function Dashboard({ darkMode, setDarkMode }) {
             <Card className="hover:shadow-card transition-shadow duration-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
               <Title className="text-gray-900 dark:text-gray-100">Alert Severity Distribution</Title>
               <Text className="mt-2 text-gray-600 dark:text-gray-300">Current alert levels by severity</Text>
-              <div className="mt-6">
-                <DonutChart
-                  data={severityData}
-                  category="value"
-                  index="name"
-                  valueFormatter={(number) => `${number} Alerts`}
-                  colors={["red", "amber", "yellow", "green"]}
-                  showAnimation={true}
-                  showTooltip={true}
-                  className="h-72"
-                />
+              <div className="mt-6 flex justify-center">
+                <PieChart width={320} height={320}>
+                  <Pie
+                    data={pieData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={80}
+                    outerRadius={120}
+                    label
+                  >
+                    {pieData.map((entry, idx) => (
+                      <Cell key={`cell-${idx}`} fill={severityColors[entry.name] || "#8884d8"} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
               </div>
             </Card>
           </div>
 
           {/* Live Alerts Feed */}
           <Card className="hover:shadow-card transition-shadow duration-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-amber-500">
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex justify-between items-center mb-4">
               <div>
                 <Title className="text-gray-900 dark:text-gray-100">Live Alerts</Title>
-                <Text className="mt-2 text-gray-500 dark:text-gray-300">Real-time security notifications</Text>
+                <Text className="mt-2 text-gray-500 dark:text-gray-300">Most recent security notifications</Text>
               </div>
-              <button className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors duration-200">
-                View All
-              </button>
+              {/* Removed View All button */}
+            </div>
+            {/* Severity summary badges */}
+            <div className="flex gap-2 mb-4">
+              <span className="bg-red-600 text-white px-2 py-1 rounded text-xs">Critical: {severitySummary.critical}</span>
+              <span className="bg-amber-500 text-white px-2 py-1 rounded text-xs">High: {severitySummary.high}</span>
+              <span className="bg-yellow-400 text-gray-900 px-2 py-1 rounded text-xs">Medium: {severitySummary.medium}</span>
+              <span className="bg-green-600 text-white px-2 py-1 rounded text-xs">Low: {severitySummary.low}</span>
             </div>
             <div className="space-y-4">
               {liveAlerts.length === 0 ? (
                 <div className="p-4 text-gray-500 dark:text-gray-400">No live alerts.</div>
               ) : (
-                liveAlerts.map((alert, idx) => (
-                  <div
-                    key={idx}
-                    className="p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-amber-500 transition-colors duration-200"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Text className="font-medium text-gray-900 dark:text-gray-100">
-                          Threat Intel IP
-                        </Text>
-                        <Text className="text-sm text-gray-500 dark:text-gray-300 mt-1">
-                          {alert.short_description}
-                        </Text>
-                        <div className="mt-1 flex gap-4">
-                          <span className="text-xs text-gray-700 dark:text-gray-200">
-                            <b>Risk Score:</b> {alert.risk_score}
-                          </span>
-                          <span className="text-xs text-gray-700 dark:text-gray-200">
-                            <b>Severity:</b> {alert.severity}
-                          </span>
+                liveAlerts
+                  .slice(0, 4)
+                  .map((alert, idx) => (
+                    <div
+                      key={idx}
+                      className="p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-amber-500 transition-colors duration-200"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Text className="font-medium text-gray-900 dark:text-gray-100">
+                            {alert.name}
+                          </Text>
+                          <Text className="text-sm text-gray-500 dark:text-gray-300 mt-1">
+                            {alert.short_description}
+                          </Text>
+                          <div className="mt-1 flex gap-4 flex-wrap">
+                            <span className="text-xs text-gray-700 dark:text-gray-200">
+                              <b>Risk Score:</b> {alert.risk_score}
+                            </span>
+                            <span className="text-xs text-gray-700 dark:text-gray-200">
+                              <b>Severity:</b> {alert.severity}
+                            </span>
+                            {alert.timestamp && (
+                              <span className="text-xs text-gray-500 dark:text-gray-400">
+                                {new Date(alert.timestamp).toLocaleTimeString()}
+                              </span>
+                            )}
+                          </div>
                         </div>
+                        <span className={`px-3 py-1 text-xs rounded-full text-white ${getSeverityBadge(alert.severity)}`}>
+                          {alert.severity ? alert.severity.charAt(0).toUpperCase() + alert.severity.slice(1) : 'Unknown'}
+                        </span>
                       </div>
-                      <span className={`px-3 py-1 text-xs rounded-full text-white ${getSeverityBadge(alert.severity)}`}>
-                        {alert.severity ? alert.severity.charAt(0).toUpperCase() + alert.severity.slice(1) : 'Unknown'}
-                      </span>
+                      <div className="mt-3 flex items-center space-x-4">
+                        <button
+                          className="text-xs text-primary hover:text-primary-hover transition-colors"
+                          onClick={() => setSelectedAlert(alert)}
+                        >
+                          Details
+                        </button>
+                        <button
+                          className="text-xs text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 transition-colors"
+                          onClick={() => handleDismiss(idx)}
+                        >
+                        </button>
+                      </div>
                     </div>
-                    <div className="mt-3 flex items-center space-x-4">
-                      <button className="text-xs text-primary hover:text-primary-hover transition-colors">
-                        Investigate
-                      </button>
-                      <button
-                        className="text-xs text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 transition-colors"
-                        onClick={() => handleDismiss(idx)}
-                      >
-                        Dismiss
-                      </button>
-                    </div>
-                  </div>
-                ))
+                  ))
               )}
             </div>
+            {/* Modal for Alert Details */}
+            {selectedAlert && (
+              <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+                <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-2xl relative border border-blue-200 dark:border-blue-900">
+                  {/* Header */}
+                  <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 px-6 py-4 bg-blue-50 dark:bg-blue-950 rounded-t-xl">
+                    <div className="flex items-center gap-3">
+                      {/* Alert icon */}
+                      <svg className="w-7 h-7 text-blue-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z" />
+                      </svg>
+                      <div>
+                        <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">{selectedAlert.name}</h3>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          {selectedAlert.timestamp ? new Date(selectedAlert.timestamp).toLocaleString() : ""}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                      onClick={() => setSelectedAlert(null)}
+                      aria-label="Close"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  {/* Body */}
+                  <div className="px-8 py-6">
+                    <div className="mb-4 flex flex-wrap gap-6">
+                      <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">IP</div>
+                        <div className="font-semibold">{selectedAlert.ip}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Port</div>
+                        <div className="font-semibold">{selectedAlert.port}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Severity</div>
+                        <span className={`inline-block px-2 py-1 rounded text-xs font-semibold
+                          ${selectedAlert.severity === "critical"
+                            ? "bg-red-600 text-white"
+                            : selectedAlert.severity === "high"
+                              ? "bg-red-200 text-red-800"
+                              : selectedAlert.severity === "medium"
+                                ? "bg-yellow-200 text-yellow-800"
+                                : "bg-green-200 text-green-800"
+                          }`}>
+                          {selectedAlert.severity}
+                        </span>
+                      </div>
+                      <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Risk Score</div>
+                        <div className="font-semibold">{selectedAlert.risk_score}</div>
+                      </div>
+                    </div>
+                    <div className="mb-4">
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Reason</div>
+                      <div className="text-sm text-gray-800 dark:text-gray-200">{selectedAlert.reason}</div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Threat Category</div>
+                        <div className="font-semibold">{selectedAlert.threat_category}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Sub Type</div>
+                        <div className="font-semibold">{selectedAlert.sub_type}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Host Name</div>
+                        <div className="font-semibold">{selectedAlert.hostname}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Region</div>
+                        <div className="font-semibold">{selectedAlert.region_name}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Country</div>
+                        <div className="font-semibold">{selectedAlert.country_name}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </Card>
         </main>
         {/* AI Chatbot (always visible, fixed position) */}
