@@ -1,7 +1,20 @@
-node_modules
-dist
-build
-.git
-Dockerfile
-docker-compose.yml
+# Local data / docker volumes
+clickhouse_data/
+
+# Dependencies and builds
+node_modules/
+dist/
+build/
+
+# Logs and temp files
+*.log
+*.tmp
+__pycache__/
+
+# Secrets / environment
 .env
+
+# Editor files
+.vscode/
+.idea/
+.DS_Store

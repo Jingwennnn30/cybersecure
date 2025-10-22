@@ -13,6 +13,7 @@ logs
 *.pid
 *.sock
 docker-compose.override.yml
+clickhouse_data/  
 
 # VS Code
 .vscode/
@@ -20,3 +21,4 @@ docker-compose.override.yml
 # OS
 .DS_Store
 Thumbs.db
+
