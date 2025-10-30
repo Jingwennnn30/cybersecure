@@ -216,10 +216,11 @@ function Dashboard({ darkMode, setDarkMode }) {
 
   // --- Severity Color Mapping for PieChart ---
   const severityColors = {
-    Critical: "#ef4444", // red-500
-    High: "#f59e42",     // orange-400
-    Medium: "#facc15",   // yellow-400
-    Low: "#22c55e",      // green-500
+    critical: "#ef4444",   // red-500
+    high: "#f59e42",      // orange-400
+    medium: "#facc15",    // yellow-400
+    low: "#22c55e",       // green-500
+    unknown: "#94a3b8"    // gray-400
   };
 
   const pieData = stats.severityDist.map(item => ({
@@ -447,13 +448,13 @@ function Dashboard({ darkMode, setDarkMode }) {
                 className="mt-6 h-72"
                 data={stats.alertTrends}
                 index="date"
-                categories={["alerts"]}
+                categories={["Alerts"]}
                 colors={["blue"]}
                 valueFormatter={(number) => number.toString()}
                 showAnimation={true}
                 showLegend={true}
-                showGridLines={false}
-                showYAxis={false}
+                showGridLines={true}
+                showYAxis={true}
               />
             </Card>
 
@@ -468,8 +469,9 @@ function Dashboard({ darkMode, setDarkMode }) {
                     nameKey="name"
                     cx="50%"
                     cy="50%"
-                    innerRadius={80}
-                    outerRadius={120}
+                    innerRadius={60}
+                    outerRadius={80}
+                    labelLine={true}
                     label
                   >
                     {pieData.map((entry, idx) => (
@@ -477,7 +479,7 @@ function Dashboard({ darkMode, setDarkMode }) {
                     ))}
                   </Pie>
                   <Tooltip />
-                  <Legend />
+                  <Legend verticalAlign="bottom" height={36} />
                 </PieChart>
               </div>
             </Card>

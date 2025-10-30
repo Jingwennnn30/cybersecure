@@ -22,3 +22,6 @@ clickhouse_data/
 .DS_Store
 Thumbs.db
 
+# Firebase
+serviceAccountKey.json
+**/serviceAccountKey.json
