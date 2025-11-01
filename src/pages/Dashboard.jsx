@@ -443,7 +443,7 @@ function Dashboard({ darkMode, setDarkMode }) {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             <Card className="hover:shadow-card transition-shadow duration-200">
               <Title className="text-gray-900 dark:text-gray-100">Alert Trends</Title>
-              <Text className="mt-2 text-gray-500 dark:text-gray-300">6-month alert history and resolution rate</Text>
+              <Text className="mt-2 text-gray-500 dark:text-gray-300">2-month alert history and resolution rate</Text>
               <AreaChart
                 className="mt-6 h-72"
                 data={stats.alertTrends}
@@ -453,8 +453,9 @@ function Dashboard({ darkMode, setDarkMode }) {
                 valueFormatter={(number) => number.toString()}
                 showAnimation={true}
                 showLegend={true}
-                showGridLines={true}
+                showGridLines={false}
                 showYAxis={true}
+                showXAxis={false}
               />
             </Card>
 

@@ -1,10 +1,38 @@
+// Load environment variables
+require('dotenv').config();
+
 const express = require('express');
 const { createClient } = require('@clickhouse/client');
 const cors = require('cors');
 const app = express();
 const https = require('https');
+const WebSocket = require('ws');
+const { Server } = require('http');
+
 app.use(cors());
 const PORT = 4000;
+
+// Create WebSocket server
+const server = new Server(app);
+const wss = new WebSocket.Server({ server });
+
+// ClickHouse client configuration
+const client = createClient({
+  host: process.env.CLICKHOUSE_HOST || 'http://localhost:8123',
+  username: process.env.CLICKHOUSE_USER || 'default',
+  password: process.env.CLICKHOUSE_PASSWORD || '',
+  database: process.env.CLICKHOUSE_DB || 'default'
+});
+
+console.log('Connecting to ClickHouse at:', process.env.CLICKHOUSE_HOST);
+console.log('Using database:', process.env.CLICKHOUSE_DB);
+
+// Test ClickHouse connection
+client.ping().then(() => {
+  console.log('✓ ClickHouse connection successful!');
+}).catch((err) => {
+  console.error('✗ ClickHouse connection error:', err.message);
+});
 
 const admin = require('firebase-admin');
 const serviceAccount = require('./serviceAccountKey.json');
@@ -116,226 +144,125 @@ const clickhouse = createClient({
   database: 'default',
 });
 
-// Test ClickHouse connection and log table info
-async function testClickHouseConnection() {
-  try {
-    console.log('Testing ClickHouse connection...');
-    
-    // Test basic connectivity
-    const testResult = await clickhouse.query({
-      query: 'SELECT 1',
-      format: 'JSONEachRow'
-    });
-    console.log('Basic connectivity test:', testResult);
-
-    // List available tables
-    const tables = await clickhouse.query({
-      query: 'SHOW TABLES',
-      format: 'JSONEachRow'
-    });
-    console.log('Available tables:', tables);
-
-    // Sample data from alerts table
-    const sample = await clickhouse.query({
-      query: 'SELECT * FROM alerts LIMIT 2',
-      format: 'JSONEachRow'
-    });
-    console.log('Sample alerts data:', sample);
-
-    return true;
-  } catch (error) {
-    console.error('ClickHouse connection error:', error);
-    return false;
-  }
-}
-
-// Test connection on startup
-testClickHouseConnection();
+// ClickHouse connection is already tested above with client.ping()
 
 app.get('/api/dashboard-stats', async (req, res) => {
   try {
-    console.log('Fetching dashboard stats from ClickHouse...');
-    console.log('Connecting to ClickHouse with client config:', {
-      url: clickhouse.config.url,
-      database: clickhouse.config.database,
-      username: clickhouse.config.username
-    });
-
-    // Test the alerts table existence
-    const tableTest = await clickhouse.query({
-      query: 'SELECT count() FROM alerts LIMIT 1',
-      format: 'JSONEachRow'
-    });
-    console.log('Table test result:', tableTest);
+    console.log('Fetching dashboard stats...');
     
-    // Get alerts from today and total alerts
-    const alertsStatsResult = await clickhouse.query({
+    // Get today's alerts count (Malaysia timezone)
+    const alertsTodayQuery = await client.query({
       query: `
-        SELECT 
-          count() as totalCount,
-          countIf(toDate(timestamp) = toDate(now())) as todayCount,
-          countIf(severity = 'high' OR toInt32(risk_score) >= 70) as criticalCount
-        FROM alerts
-      `,
-      format: 'JSONEachRow'
-    });
-
-
-
-    // Get alerts trend for last 6 months
-    const alertTrendsResult = await clickhouse.query({
-      query: `
-        SELECT 
-          formatDateTime(month, '%Y-%m-%d') as date,
-          count() as Alerts
-        FROM (
-          SELECT 
-            toStartOfMonth(timestamp) as month
-          FROM alerts
-          WHERE timestamp >= subtractMonths(now(), 6)
-          GROUP BY month
-          ORDER BY month ASC
-        )
-      `,
-      format: 'JSONEachRow'
-    });
-
-    // Get severity distribution
-    const severityDistResult = await clickhouse.query({
-      query: `
-        SELECT 
-          if(severity = '', 'unknown', severity) as severity,
-          count() as count
+        SELECT COUNT(*) as count 
         FROM alerts 
-        WHERE timestamp >= subtractDays(now(), 30)
+        WHERE toDate(toTimeZone(timestamp, 'Asia/Kuala_Lumpur')) = toDate(now('Asia/Kuala_Lumpur'))
+      `
+    });
+    const alertsToday = await alertsTodayQuery.json();
+    console.log('Today alerts:', alertsToday);
+
+    // Get critical alerts count (high OR critical severity)
+    const criticalAlertsQuery = await client.query({
+      query: `
+        SELECT COUNT(*) as count 
+        FROM alerts 
+        WHERE lower(severity) IN ('high', 'critical')
+      `
+    });
+    const criticalAlerts = await criticalAlertsQuery.json();
+    console.log('Critical alerts:', criticalAlerts);
+
+    // Get yesterday's alerts for change calculation
+    const yesterdayAlertsQuery = await client.query({
+      query: `
+        SELECT COUNT(*) as count 
+        FROM alerts 
+        WHERE toDate(toTimeZone(timestamp, 'Asia/Kuala_Lumpur')) = toDate(now('Asia/Kuala_Lumpur')) - 1
+      `
+    });
+    const yesterdayAlerts = await yesterdayAlertsQuery.json();
+
+    // Calculate stats - ClickHouse returns data in 'data' array
+    const todayCount = parseInt(alertsToday.data?.[0]?.count) || 0;
+    const criticalCount = parseInt(criticalAlerts.data?.[0]?.count) || 0;
+    const yesterdayCount = parseInt(yesterdayAlerts.data?.[0]?.count) || 0;
+
+    // Get alert trends for last 2 months (this month and last month)
+    const alertTrendsQuery = await client.query({
+      query: `
+        SELECT 
+          toStartOfMonth(toTimeZone(timestamp, 'Asia/Kuala_Lumpur')) as month,
+          count() as Alerts
+        FROM alerts
+        WHERE toTimeZone(timestamp, 'Asia/Kuala_Lumpur') >= toStartOfMonth(now('Asia/Kuala_Lumpur')) - INTERVAL 1 MONTH
+        GROUP BY month
+        ORDER BY month ASC
+      `
+    });
+    const alertTrendsData = await alertTrendsQuery.json();
+    const alertTrends = alertTrendsData.data?.map(row => ({
+      date: new Date(row.month).toLocaleDateString('en-US', { year: 'numeric', month: 'short' }),
+      Alerts: parseInt(row.Alerts) || 0
+    })) || [];
+
+    // Get severity distribution from current alerts
+    const severityDistQuery = await client.query({
+      query: `
+        SELECT 
+          severity,
+          count() as count
+        FROM alerts
         GROUP BY severity
         ORDER BY count DESC
-      `,
-      format: 'JSONEachRow'
+      `
     });
+    const severityDistData = await severityDistQuery.json();
+    const severityDist = severityDistData.data?.map(row => ({
+      name: row.severity || 'unknown',
+      value: parseInt(row.count) || 0
+    })) || [];
 
-    // Process results
     const stats = {
-      alertsToday: 0,
-      criticalAlerts: 0,
-      aiProcessed: 0,
-      aiAnalyzed: 0,
-      systemHealth: "Unknown",
-      alertsChange: 0,
-      alertTrends: [],
-      severityDist: []
+      alertsToday: todayCount,
+      criticalAlerts: criticalCount,
+      alertsChange: yesterdayCount > 0 
+        ? ((todayCount - yesterdayCount) / yesterdayCount) * 100 
+        : 0,
+      systemHealth: criticalCount > 5 ? "Warning" : "Active",
+      aiProcessed: 100,
+      aiAnalyzed: todayCount,
+      alertTrends: alertTrends,
+      severityDist: severityDist
     };
 
-    // Process alerts stats
-    const alertsStatsData = [];
-    for await (const row of alertsStatsResult.stream()) {
-      alertsStatsData.push(row);
-      console.log('Alert stats row:', row);
-    }
-    
-    console.log('Alert stats data:', alertsStatsData);
-    
-    if (alertsStatsData.length > 0) {
-      const { totalCount, todayCount, criticalCount } = alertsStatsData[0];
-      stats.alertsToday = parseInt(todayCount || '0');
-      stats.criticalAlerts = parseInt(criticalCount || '0');
-      stats.aiProcessed = Math.min(100, Math.round((parseInt(totalCount) / 100) * 100));
-      stats.aiAnalyzed = parseInt(todayCount);
-      stats.systemHealth = parseInt(criticalCount) > 5 ? "Warning" : "Good";
-      
-      console.log('Processed stats:', {
-        alertsToday: stats.alertsToday,
-        criticalAlerts: stats.criticalAlerts,
-        aiProcessed: stats.aiProcessed,
-        aiAnalyzed: stats.aiAnalyzed,
-        systemHealth: stats.systemHealth
-      });
-    }
-
-    // Process alert trends
-    const trendData = [];
-    for await (const row of alertTrendsResult.stream()) {
-      trendData.push(row);
-      console.log('Trend row:', row);
-    }
-    
-    console.log('Trend data:', trendData);
-    
-    stats.alertTrends = trendData.map(data => {
-      const item = {
-        date: data.date,
-        Alerts: parseInt(data.Alerts || '0')
-      };
-      console.log('Trend item:', item);
-      return item;
-    });
-
-    // Process severity distribution
-    const severityData = [];
-    for await (const row of severityDistResult.stream()) {
-      severityData.push(row);
-      console.log('Severity row:', row);
-    }
-    
-    console.log('Severity data:', severityData);
-    
-    stats.severityDist = severityData.map(data => {
-      const item = {
-        name: data.severity || 'unknown',
-        value: parseInt(data.count || '0')
-      };
-      console.log('Severity item:', item);
-      return item;
-    });
-
-    // Calculate alerts change (compared to yesterday)
-    const yesterdayData = [];
-    const yesterdayResult = await clickhouse.query({
-      query: `
-        SELECT COUNT(*) as count
-        FROM alerts 
-        WHERE toDate(timestamp) = yesterday()
-      `,
-      format: 'JSONEachRow'
-    });
-
-    for await (const row of yesterdayResult.stream()) {
-      yesterdayData.push(row);
-    }
-
-    if (yesterdayData.length > 0) {
-      const yesterdayCount = parseInt(yesterdayData[0].count || '0');
-      if (yesterdayCount > 0) {
-        stats.alertsChange = ((stats.alertsToday - yesterdayCount) / yesterdayCount) * 100;
-      }
-    }
-
+    console.log('Sending stats:', stats);
     res.json(stats);
   } catch (err) {
     console.error('Error in /api/dashboard-stats:', err);
-    console.error('Error details:', {
-      message: err.message,
-      code: err.code,
-      stack: err.stack
-    });
-    res.status(500).json({ 
-      error: 'Internal server error', 
-      message: err.message,
-      details: err.stack 
-    });
+    // Return default stats instead of error
+    const defaultStats = {
+      alertsToday: 0,
+      criticalAlerts: 0,
+      alertsChange: 0,
+      systemHealth: "Unknown",
+      aiProcessed: 0,
+      aiAnalyzed: 0
+    };
+    console.warn('Returning default stats due to error');
+    res.json(defaultStats);
   }
 });
 
 app.get('/api/alerts', async (req, res) => {
   try {
     console.log('Fetching alerts from ClickHouse...');
-    const result = await clickhouse.query({
+    const result = await client.query({
       query: `
         SELECT 
           ip,
-          toString(port) as port,
+          port,
           severity,
-          toString(risk_score) as risk_score,
+          risk_score,
           reason,
           timestamp,
           name
@@ -345,45 +272,24 @@ app.get('/api/alerts', async (req, res) => {
       format: 'JSONEachRow'
     });
 
-    console.log('Query executed, getting stream...');
-    const stream = result.stream();
-    const data = [];
-    
-    console.log('Processing stream...');
-    try {
-      for await (const rows of stream) {
-        // Handle both array of rows and single rows
-        const rowsArray = Array.isArray(rows) ? rows : [rows];
-        for (const row of rowsArray) {
-          // Parse text if it's a string
-          const rowData = typeof row.text === 'string' ? JSON.parse(row.text) : row;
-          data.push(rowData);
-        }
-      }
-      console.log('Stream processing complete. Total items:', data.length);
-    } catch (streamErr) {
-      console.error('Stream processing error:', streamErr);
-      throw streamErr;
+    console.log('Query executed, parsing JSON...');
+    const data = await result.json();
+    console.log('Received data count:', data.length);
+    if (data.length > 0) {
+      console.log('Sample row:', data[0]);
     }
 
-    if (data.length === 0) {
-      console.warn('Warning: No data retrieved from stream');
-    }
-
-    console.log('Sending response with data length:', data.length);
     res.json(data);
   } catch (err) {
     console.error('Error in /api/alerts:', err);
-    res.status(500).json({ 
-      error: err.message,
-      details: 'Error occurred while fetching alerts',
-      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
-    });
+    console.error('Error details:', err.message, err.stack);
+    // Return empty array instead of error object to prevent frontend crashes
+    console.warn('Returning empty array due to database connection error');
+    res.json([]);
   }
 });
 
-
-
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`Backend running on http://localhost:${PORT}`);
+  console.log('WebSocket server ready');
 });

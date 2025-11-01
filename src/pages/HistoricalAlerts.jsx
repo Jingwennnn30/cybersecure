@@ -140,10 +140,10 @@ function HistoricalAlerts({ darkMode, setDarkMode }) {
                                         </TableRow>
                                     </TableHead>
                                     <TableBody>
-                                        {currentAlerts.map((alert) => (
-                                            <TableRow key={alert.id} className="border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition">
+                                        {currentAlerts.map((alert, index) => (
+                                            <TableRow key={`${alert.timestamp}-${alert.ip}-${index}`} className="border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition">
                                                 <TableCell className="text-gray-700 dark:text-gray-200">{alert.timestamp}</TableCell>
-                                                <TableCell className="text-gray-700 dark:text-gray-200">{alert.type}</TableCell>
+                                                <TableCell className="text-gray-700 dark:text-gray-200">{alert.name || alert.type || 'Unknown'}</TableCell>
                                                 <TableCell>
                                                     <Badge
                                                         color={
@@ -167,10 +167,10 @@ function HistoricalAlerts({ darkMode, setDarkMode }) {
                                                                     : 'gray'
                                                         }
                                                     >
-                                                        {alert.status}
+                                                        {alert.status || 'Open'}
                                                     </Badge>
                                                 </TableCell>
-                                                <TableCell className="text-gray-700 dark:text-gray-200">{alert.source}</TableCell>
+                                                <TableCell className="text-gray-700 dark:text-gray-200">{alert.ip || alert.source || 'N/A'}</TableCell>
                                             </TableRow>
                                         ))}
                                     </TableBody>
