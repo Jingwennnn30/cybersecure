@@ -22,10 +22,16 @@ function Alerts({ darkMode, setDarkMode }) {
         fetch("http://localhost:4000/api/alerts")
             .then(res => res.json())
             .then(data => {
-                setAlerts(data);
+                // Ensure data is always an array
+                console.log('Received alerts data:', data);
+                setAlerts(Array.isArray(data) ? data : []);
                 setLoading(false);
             })
-            .catch(() => setLoading(false));
+            .catch((error) => {
+                console.error('Error fetching alerts:', error);
+                setAlerts([]);
+                setLoading(false);
+            });
     }, []);
 
     // Filtering logic

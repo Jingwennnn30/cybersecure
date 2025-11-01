@@ -1,5 +1,5 @@
-import React from 'react';
-import { Card, Title, Text, Table, TableHead, TableRow, TableHeaderCell, TableBody, TableCell, Badge } from '@tremor/react';
+import React, { useState, useEffect } from 'react';
+import { Card, Title, Text, Table, TableHead, TableRow, TableHeaderCell, TableBody, TableCell, Badge, Button } from '@tremor/react';
 import Navigation from '../components/Navigation';
 
 const historicalAlerts = [
@@ -23,6 +23,39 @@ const historicalAlerts = [
 ];
 
 function HistoricalAlerts({ darkMode, setDarkMode }) {
+    // Pagination state
+    const [currentPage, setCurrentPage] = useState(1);
+    const [alertsPerPage] = useState(10);
+    const [alerts, setAlerts] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    // Fetch alerts from the backend
+    useEffect(() => {
+        const fetchAlerts = async () => {
+            try {
+                const response = await fetch('http://localhost:4000/api/alerts');
+                if (response.ok) {
+                    const data = await response.json();
+                    setAlerts(data);
+                }
+            } catch (error) {
+                console.error('Error fetching alerts:', error);
+            }
+            setLoading(false);
+        };
+
+        fetchAlerts();
+    }, []);
+
+    // Get current alerts for pagination
+    const indexOfLastAlert = currentPage * alertsPerPage;
+    const indexOfFirstAlert = indexOfLastAlert - alertsPerPage;
+    const currentAlerts = alerts.slice(indexOfFirstAlert, indexOfLastAlert);
+    const totalPages = Math.ceil(alerts.length / alertsPerPage);
+
+    // Change page
+    const paginate = (pageNumber) => setCurrentPage(pageNumber);
+
     // Sidebar and main content styling
     const sidebarClass = "w-72 bg-white dark:bg-gray-900 p-6 shadow-xl border-r border-gray-200 dark:border-gray-800 fixed h-screen flex flex-col";
     // Add extra padding-left to mainClass for spacing between sidebar and content
@@ -92,52 +125,89 @@ function HistoricalAlerts({ darkMode, setDarkMode }) {
 
                     <Card className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-md rounded-xl">
                         <Title className="text-gray-900 dark:text-gray-100">Alert History</Title>
-                        <Table className="mt-4">
-                            <TableHead>
-                                <TableRow>
-                                    <TableHeaderCell className="uppercase text-xs font-semibold text-gray-500 dark:text-gray-400 tracking-wider">Timestamp</TableHeaderCell>
-                                    <TableHeaderCell className="uppercase text-xs font-semibold text-gray-500 dark:text-gray-400 tracking-wider">Type</TableHeaderCell>
-                                    <TableHeaderCell className="uppercase text-xs font-semibold text-gray-500 dark:text-gray-400 tracking-wider">Severity</TableHeaderCell>
-                                    <TableHeaderCell className="uppercase text-xs font-semibold text-gray-500 dark:text-gray-400 tracking-wider">Status</TableHeaderCell>
-                                    <TableHeaderCell className="uppercase text-xs font-semibold text-gray-500 dark:text-gray-400 tracking-wider">Source</TableHeaderCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {historicalAlerts.map((alert) => (
-                                    <TableRow key={alert.id} className="border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition">
-                                        <TableCell className="text-gray-700 dark:text-gray-200">{alert.timestamp}</TableCell>
-                                        <TableCell className="text-gray-700 dark:text-gray-200">{alert.type}</TableCell>
-                                        <TableCell>
-                                            <Badge
-                                                color={
-                                                    alert.severity === 'Critical'
-                                                        ? 'rose'
-                                                        : alert.severity === 'High'
-                                                            ? 'amber'
-                                                            : 'gray'
-                                                }
-                                            >
-                                                {alert.severity}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge
-                                                color={
-                                                    alert.status === 'Resolved'
-                                                        ? 'emerald'
-                                                        : alert.status === 'Investigating'
-                                                            ? 'amber'
-                                                            : 'gray'
-                                                }
-                                            >
-                                                {alert.status}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell className="text-gray-700 dark:text-gray-200">{alert.source}</TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
+                        {loading ? (
+                            <div className="text-center mt-6">Loading alerts...</div>
+                        ) : (
+                            <>
+                                <Table className="mt-4">
+                                    <TableHead>
+                                        <TableRow>
+                                            <TableHeaderCell className="uppercase text-xs font-semibold text-gray-500 dark:text-gray-400 tracking-wider">Timestamp</TableHeaderCell>
+                                            <TableHeaderCell className="uppercase text-xs font-semibold text-gray-500 dark:text-gray-400 tracking-wider">Type</TableHeaderCell>
+                                            <TableHeaderCell className="uppercase text-xs font-semibold text-gray-500 dark:text-gray-400 tracking-wider">Severity</TableHeaderCell>
+                                            <TableHeaderCell className="uppercase text-xs font-semibold text-gray-500 dark:text-gray-400 tracking-wider">Status</TableHeaderCell>
+                                            <TableHeaderCell className="uppercase text-xs font-semibold text-gray-500 dark:text-gray-400 tracking-wider">Source</TableHeaderCell>
+                                        </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                        {currentAlerts.map((alert, index) => (
+                                            <TableRow key={`${alert.timestamp}-${alert.ip}-${index}`} className="border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition">
+                                                <TableCell className="text-gray-700 dark:text-gray-200">{alert.timestamp}</TableCell>
+                                                <TableCell className="text-gray-700 dark:text-gray-200">{alert.name || alert.type || 'Unknown'}</TableCell>
+                                                <TableCell>
+                                                    <Badge
+                                                        color={
+                                                            alert.severity === 'Critical'
+                                                                ? 'rose'
+                                                                : alert.severity === 'High'
+                                                                    ? 'amber'
+                                                                    : 'gray'
+                                                        }
+                                                    >
+                                                        {alert.severity}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge
+                                                        color={
+                                                            alert.status === 'Resolved'
+                                                                ? 'emerald'
+                                                                : alert.status === 'Investigating'
+                                                                    ? 'amber'
+                                                                    : 'gray'
+                                                        }
+                                                    >
+                                                        {alert.status || 'Open'}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-gray-700 dark:text-gray-200">{alert.ip || alert.source || 'N/A'}</TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                                <div className="flex justify-center items-center gap-2 mt-4">
+                                    <Button
+                                        size="xs"
+                                        onClick={() => paginate(currentPage - 1)}
+                                        disabled={currentPage === 1}
+                                        variant="secondary"
+                                        className="px-3 py-1"
+                                    >
+                                        Previous
+                                    </Button>
+                                    {[...Array(totalPages)].map((_, index) => (
+                                        <Button
+                                            key={index + 1}
+                                            size="xs"
+                                            variant={currentPage === index + 1 ? "primary" : "secondary"}
+                                            onClick={() => paginate(index + 1)}
+                                            className="px-3 py-1"
+                                        >
+                                            {index + 1}
+                                        </Button>
+                                    ))}
+                                    <Button
+                                        size="xs"
+                                        onClick={() => paginate(currentPage + 1)}
+                                        disabled={currentPage === totalPages}
+                                        variant="secondary"
+                                        className="px-3 py-1"
+                                    >
+                                        Next
+                                    </Button>
+                                </div>
+                            </>
+                        )}
                     </Card>
                 </main>
             </div>

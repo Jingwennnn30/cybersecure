@@ -216,10 +216,11 @@ function Dashboard({ darkMode, setDarkMode }) {
 
   // --- Severity Color Mapping for PieChart ---
   const severityColors = {
-    Critical: "#ef4444", // red-500
-    High: "#f59e42",     // orange-400
-    Medium: "#facc15",   // yellow-400
-    Low: "#22c55e",      // green-500
+    critical: "#ef4444",   // red-500
+    high: "#f59e42",      // orange-400
+    medium: "#facc15",    // yellow-400
+    low: "#22c55e",       // green-500
+    unknown: "#94a3b8"    // gray-400
   };
 
   const pieData = stats.severityDist.map(item => ({
@@ -442,18 +443,19 @@ function Dashboard({ darkMode, setDarkMode }) {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             <Card className="hover:shadow-card transition-shadow duration-200">
               <Title className="text-gray-900 dark:text-gray-100">Alert Trends</Title>
-              <Text className="mt-2 text-gray-500 dark:text-gray-300">6-month alert history and resolution rate</Text>
+              <Text className="mt-2 text-gray-500 dark:text-gray-300">2-month alert history and resolution rate</Text>
               <AreaChart
                 className="mt-6 h-72"
                 data={stats.alertTrends}
                 index="date"
-                categories={["alerts"]}
+                categories={["Alerts"]}
                 colors={["blue"]}
                 valueFormatter={(number) => number.toString()}
                 showAnimation={true}
                 showLegend={true}
                 showGridLines={false}
-                showYAxis={false}
+                showYAxis={true}
+                showXAxis={false}
               />
             </Card>
 
@@ -468,8 +470,9 @@ function Dashboard({ darkMode, setDarkMode }) {
                     nameKey="name"
                     cx="50%"
                     cy="50%"
-                    innerRadius={80}
-                    outerRadius={120}
+                    innerRadius={60}
+                    outerRadius={80}
+                    labelLine={true}
                     label
                   >
                     {pieData.map((entry, idx) => (
@@ -477,7 +480,7 @@ function Dashboard({ darkMode, setDarkMode }) {
                     ))}
                   </Pie>
                   <Tooltip />
-                  <Legend />
+                  <Legend verticalAlign="bottom" height={36} />
                 </PieChart>
               </div>
             </Card>

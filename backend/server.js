@@ -1,9 +1,38 @@
+// Load environment variables
+require('dotenv').config();
+
 const express = require('express');
 const { createClient } = require('@clickhouse/client');
 const cors = require('cors');
 const app = express();
+const https = require('https');
+const WebSocket = require('ws');
+const { Server } = require('http');
+
 app.use(cors());
 const PORT = 4000;
+
+// Create WebSocket server
+const server = new Server(app);
+const wss = new WebSocket.Server({ server });
+
+// ClickHouse client configuration
+const client = createClient({
+  host: process.env.CLICKHOUSE_HOST || 'http://localhost:8123',
+  username: process.env.CLICKHOUSE_USER || 'default',
+  password: process.env.CLICKHOUSE_PASSWORD || '',
+  database: process.env.CLICKHOUSE_DB || 'default'
+});
+
+console.log('Connecting to ClickHouse at:', process.env.CLICKHOUSE_HOST);
+console.log('Using database:', process.env.CLICKHOUSE_DB);
+
+// Test ClickHouse connection
+client.ping().then(() => {
+  console.log('✓ ClickHouse connection successful!');
+}).catch((err) => {
+  console.error('✗ ClickHouse connection error:', err.message);
+});
 
 const admin = require('firebase-admin');
 const serviceAccount = require('./serviceAccountKey.json');
@@ -19,6 +48,17 @@ let liveAlerts = [];
 
 app.use(cors());
 app.use(express.json());
+// Also support URL-encoded bodies (some tools default to this)
+app.use(express.urlencoded({ extended: true }));
+
+// Simple request logger to help debug routing issues (method + path)
+app.use((req, res, next) => {
+  try {
+    const ts = new Date().toISOString();
+    console.log(`${ts} ${req.method} ${req.originalUrl}`);
+  } catch {}
+  next();
+});
 
 // n8n webhook POSTs here
 app.post('/webhook/alerts', (req, res) => {
@@ -29,6 +69,49 @@ app.post('/webhook/alerts', (req, res) => {
     res.status(200).json({ success: true });
   } else {
     res.status(400).json({ error: 'Invalid alert format' });
+  }
+});
+
+// Telegram alert endpoint (for n8n HTTP Telegram node)
+app.post('/alert', (req, res) => {
+  console.log('Telegram alert received:', req.body);
+
+  const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+  const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+
+  const text = req.body?.summary || req.body?.message || JSON.stringify(req.body);
+
+  // If Telegram credentials are configured, forward the message to Telegram
+  if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID) {
+    const payload = JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text });
+    const options = {
+      hostname: 'api.telegram.org',
+      path: `/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload),
+      },
+    };
+
+    const tgReq = https.request(options, (tgRes) => {
+      let body = '';
+      tgRes.on('data', (chunk) => (body += chunk));
+      tgRes.on('end', () => {
+        const ok = tgRes.statusCode && tgRes.statusCode >= 200 && tgRes.statusCode < 300;
+        console.log('Telegram API response:', tgRes.statusCode, body);
+        res.status(200).json({ success: ok, message: ok ? 'Alert forwarded to Telegram' : 'Telegram API error', details: body });
+      });
+    });
+    tgReq.on('error', (e) => {
+      console.error('Telegram API request failed:', e.message);
+      res.status(500).json({ success: false, error: e.message });
+    });
+    tgReq.write(payload);
+    tgReq.end();
+  } else {
+    // No Telegram credentials configured; just acknowledge
+    res.status(200).json({ success: true, message: 'Alert received (Telegram not configured)' });
   }
 });
 
@@ -53,188 +136,160 @@ app.get('/get-notification-recipients', async (req, res) => {
   }
 });
 
-// ClickHouse integration
+
 const clickhouse = createClient({
-  url: 'https://nzpk59gkll.ap-southeast-1.aws.clickhouse.cloud:8443',
+  url: 'https://sphbqmm3pp.ap-southeast-1.aws.clickhouse.cloud:8443',
   username: 'default',
-  password: 'y3sRz4g.V_Nkg',
+  password: '.frZjEEidX2wb',
   database: 'default',
+});
+
+// ClickHouse connection is already tested above with client.ping()
+
+app.get('/api/dashboard-stats', async (req, res) => {
+  try {
+    console.log('Fetching dashboard stats...');
+    
+    // Get today's alerts count (Malaysia timezone)
+    const alertsTodayQuery = await client.query({
+      query: `
+        SELECT COUNT(*) as count 
+        FROM alerts 
+        WHERE toDate(toTimeZone(timestamp, 'Asia/Kuala_Lumpur')) = toDate(now('Asia/Kuala_Lumpur'))
+      `
+    });
+    const alertsToday = await alertsTodayQuery.json();
+    console.log('Today alerts:', alertsToday);
+
+    // Get critical alerts count (high OR critical severity)
+    const criticalAlertsQuery = await client.query({
+      query: `
+        SELECT COUNT(*) as count 
+        FROM alerts 
+        WHERE lower(severity) IN ('high', 'critical')
+      `
+    });
+    const criticalAlerts = await criticalAlertsQuery.json();
+    console.log('Critical alerts:', criticalAlerts);
+
+    // Get yesterday's alerts for change calculation
+    const yesterdayAlertsQuery = await client.query({
+      query: `
+        SELECT COUNT(*) as count 
+        FROM alerts 
+        WHERE toDate(toTimeZone(timestamp, 'Asia/Kuala_Lumpur')) = toDate(now('Asia/Kuala_Lumpur')) - 1
+      `
+    });
+    const yesterdayAlerts = await yesterdayAlertsQuery.json();
+
+    // Calculate stats - ClickHouse returns data in 'data' array
+    const todayCount = parseInt(alertsToday.data?.[0]?.count) || 0;
+    const criticalCount = parseInt(criticalAlerts.data?.[0]?.count) || 0;
+    const yesterdayCount = parseInt(yesterdayAlerts.data?.[0]?.count) || 0;
+
+    // Get alert trends for last 2 months (this month and last month)
+    const alertTrendsQuery = await client.query({
+      query: `
+        SELECT 
+          toStartOfMonth(toTimeZone(timestamp, 'Asia/Kuala_Lumpur')) as month,
+          count() as Alerts
+        FROM alerts
+        WHERE toTimeZone(timestamp, 'Asia/Kuala_Lumpur') >= toStartOfMonth(now('Asia/Kuala_Lumpur')) - INTERVAL 1 MONTH
+        GROUP BY month
+        ORDER BY month ASC
+      `
+    });
+    const alertTrendsData = await alertTrendsQuery.json();
+    const alertTrends = alertTrendsData.data?.map(row => ({
+      date: new Date(row.month).toLocaleDateString('en-US', { year: 'numeric', month: 'short' }),
+      Alerts: parseInt(row.Alerts) || 0
+    })) || [];
+
+    // Get severity distribution from current alerts
+    const severityDistQuery = await client.query({
+      query: `
+        SELECT 
+          severity,
+          count() as count
+        FROM alerts
+        GROUP BY severity
+        ORDER BY count DESC
+      `
+    });
+    const severityDistData = await severityDistQuery.json();
+    const severityDist = severityDistData.data?.map(row => ({
+      name: row.severity || 'unknown',
+      value: parseInt(row.count) || 0
+    })) || [];
+
+    const stats = {
+      alertsToday: todayCount,
+      criticalAlerts: criticalCount,
+      alertsChange: yesterdayCount > 0 
+        ? ((todayCount - yesterdayCount) / yesterdayCount) * 100 
+        : 0,
+      systemHealth: criticalCount > 5 ? "Warning" : "Active",
+      aiProcessed: 100,
+      aiAnalyzed: todayCount,
+      alertTrends: alertTrends,
+      severityDist: severityDist
+    };
+
+    console.log('Sending stats:', stats);
+    res.json(stats);
+  } catch (err) {
+    console.error('Error in /api/dashboard-stats:', err);
+    // Return default stats instead of error
+    const defaultStats = {
+      alertsToday: 0,
+      criticalAlerts: 0,
+      alertsChange: 0,
+      systemHealth: "Unknown",
+      aiProcessed: 0,
+      aiAnalyzed: 0
+    };
+    console.warn('Returning default stats due to error');
+    res.json(defaultStats);
+  }
 });
 
 app.get('/api/alerts', async (req, res) => {
   try {
-    const result = await clickhouse.query({
-      query: 'SELECT * FROM alerts ORDER BY timestamp DESC LIMIT 100',
-      format: 'JSONEachRow',
-    });
-    const rows = [];
-    for await (const batch of result.stream()) {
-      for (const row of batch) {
-        if (row.text) {
-          const alert = JSON.parse(row.text);
-          rows.push({
-            name: alert.alert_name || alert.name || '',
-            ip: alert.ip || '',
-            port: alert.port || '',
-            severity: alert.severity || '',
-            risk_score: alert.risk_score || '',
-            timestamp: alert.timestamp || '',
-            reason: alert.reason || '',
-            threat_category: alert.threat_category || '',
-            sub_type: alert.sub_type || '',
-            hostname: alert.hostname || '',
-            region_name: alert.region_name || '',
-            country_name: alert.country_name || ''
-          });
-        }
-      }
-    }
-    res.json(rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Dashboard real time status
-app.get('/api/dashboard-stats', async (req, res) => {
-  try {
-    // Alerts Today
-    const alertsTodayResult = await clickhouse.query({
-      query: `SELECT count() as count FROM alerts WHERE toDate(timestamp, 'UTC') = toDate(now(), 'UTC')`,
-      format: 'JSONEachRow',
-    });
-    let alertsToday = 0;
-    for await (const batch of alertsTodayResult.stream()) {
-      for (const row of batch) {
-        const data = JSON.parse(row.text);
-        if (data.count !== undefined) {
-          alertsToday = parseInt(data.count, 10);
-        }
-      }
-    }
-
-    // Critical Alerts
-    const criticalAlertsResult = await clickhouse.query({
-      query: `SELECT count() as count FROM alerts WHERE severity = 'critical' AND toDate(timestamp, 'UTC') = toDate(now(), 'UTC')`,
-      format: 'JSONEachRow',
-    });
-    let criticalAlerts = 0;
-    for await (const batch of criticalAlertsResult.stream()) {
-      for (const row of batch) {
-        const data = JSON.parse(row.text);
-        if (data.count !== undefined) {
-          criticalAlerts = parseInt(data.count, 10);
-        }
-      }
-    }
-
-    // AI Processed (example: percentage of alerts processed by AI)
-    const aiProcessed = 95; // Placeholder
-    const aiAnalyzed = alertsToday; // Placeholder
-
-    // System Health (example: set to "Good" if less than 5 critical alerts today)
-    const systemHealth = criticalAlerts < 5 ? "Good" : "Warning";
-
-    // Alerts Change (example: percent change from yesterday)
-    const alertsYesterdayResult = await clickhouse.query({
-      query: `SELECT count() as count FROM alerts WHERE toDate(timestamp, 'UTC') = toDate(addDays(now(), -1), 'UTC')`,
-      format: 'JSONEachRow',
-    });
-    let alertsYesterday = 0;
-    for await (const batch of alertsYesterdayResult.stream()) {
-      for (const row of batch) {
-        const data = JSON.parse(row.text);
-        if (data.count !== undefined) {
-          alertsYesterday = parseInt(data.count, 10);
-        }
-      }
-    }
-    const alertsChange = alertsYesterday === 0 ? 0 : Math.round(((alertsToday - alertsYesterday) / alertsYesterday) * 100);
-
-    // Alert Trends (last 3 hours, hourly)
-    const alertTrendsResult = await clickhouse.query({
+    console.log('Fetching alerts from ClickHouse...');
+    const result = await client.query({
       query: `
-    SELECT
-      formatDateTime(timestamp, '%Y-%m-%d %H:00:00', 'UTC') as hour,
-      count() as alerts
-    FROM alerts
-    WHERE timestamp >= subtractHours(now('UTC'), 2)
-    GROUP BY hour
-    ORDER BY hour ASC
-  `,
-      format: 'JSONEachRow',
-    });
-    const alertTrends = [];
-    for await (const batch of alertTrendsResult.stream()) {
-      for (const row of batch) {
-        // Parse the JSON string in row.text
-        const data = JSON.parse(row.text);
-        alertTrends.push({
-          date: data.hour,
-          alerts: parseInt(data.alerts, 10)
-        });
-      }
-    }
-    const hours = [];
-    for (let i = 2; i >= 0; i--) {
-      const d = new Date();
-      d.setUTCHours(d.getUTCHours() - i, 0, 0, 0);
-      const hourStr = d.getUTCFullYear() + '-' +
-        String(d.getUTCMonth() + 1).padStart(2, '0') + '-' +
-        String(d.getUTCDate()).padStart(2, '0') + ' ' +
-        String(d.getUTCHours()).padStart(2, '0') + ':00:00';
-      hours.push(hourStr);
-    }
-    const trendsMap = Object.fromEntries(alertTrends.map(a => [a.date, a.alerts]));
-    const alertTrendsFilled = hours.map(hour => ({
-      date: hour,
-      alerts: trendsMap[hour] || 0
-    }));
-
-    // Severity Distribution (current)
-    const severityDistResult = await clickhouse.query({
-      query: `
-        SELECT severity as name, count() as value
-        FROM alerts
-        WHERE toDate(timestamp, 'UTC') = toDate(now(), 'UTC')
-        GROUP BY severity
+        SELECT 
+          ip,
+          port,
+          severity,
+          risk_score,
+          reason,
+          timestamp,
+          name
+        FROM alerts 
+        ORDER BY timestamp DESC
       `,
-      format: 'JSONEachRow',
+      format: 'JSONEachRow'
     });
 
-    const severityDist = [];
-    for await (const batch of severityDistResult.stream()) {
-      for (const row of batch) {
-        if (row.text) {
-          const data = JSON.parse(row.text);
-          severityDist.push({
-            name: data.name.charAt(0).toUpperCase() + data.name.slice(1), // Capitalize for display
-            value: parseInt(data.value, 10)
-          });
-        }
-      }
+    console.log('Query executed, parsing JSON...');
+    const data = await result.json();
+    console.log('Received data count:', data.length);
+    if (data.length > 0) {
+      console.log('Sample row:', data[0]);
     }
 
-    // Debug logs
-    console.log("Raw severityDist from ClickHouse:", severityDist);
-    console.log("alertTrendsFilled", alertTrendsFilled);
-    res.json({
-      alertsToday: alertsToday || 0,
-      criticalAlerts: criticalAlerts || 0,
-      aiProcessed,
-      aiAnalyzed: aiAnalyzed || 0,
-      systemHealth,
-      alertsChange: alertsChange || 0,
-      alertTrends: alertTrendsFilled,
-      severityDist: Array.isArray(severityDist) && severityDist.length > 0 ? severityDist : [],
-    });
-    console.log("Sent severityDist to frontend:", severityDist);
+    res.json(data);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
+    console.error('Error in /api/alerts:', err);
+    console.error('Error details:', err.message, err.stack);
+    // Return empty array instead of error object to prevent frontend crashes
+    console.warn('Returning empty array due to database connection error');
+    res.json([]);
   }
 });
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`Backend running on http://localhost:${PORT}`);
+  console.log('WebSocket server ready');
 });
