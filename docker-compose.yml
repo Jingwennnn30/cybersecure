@@ -2,28 +2,21 @@ services:
   frontend:
     build: .
     ports:
-      - "4007:80"
+      - "500:3000"
     container_name: frontend-app
     restart: unless-stopped
-
-  clickhouse:
-    image: clickhouse/clickhouse-server:latest
-    container_name: clickhouse
-    ports:
-      - "8123:8123"
-      - "9000:9000"
-    volumes:
-      - ./clickhouse_data:/var/lib/clickhouse
-    environment:
-      CLICKHOUSE_USER: admin
-      CLICKHOUSE_PASSWORD: admin123
-      CLICKHOUSE_DB: my_project_db
-    restart: unless-stopped
-
-  clickhouse-gui:
-    image: spoonest/clickhouse-tabix-web-client
-    container_name: clickhouse-gui
-    ports:
-      - "8080:80"
     depends_on:
-      - clickhouse
+      - backend
+
+  backend:
+    build: ./backend
+    ports:
+      - "4000:4000"
+    env_file:
+      - ./backend/.env
+    container_name: backend-app
+    restart: unless-stopped
+    # Removed dependency on clickhouse since using cloud version
+
+# Removed clickhouse and clickhouse-gui services
+# Removed volumes section
