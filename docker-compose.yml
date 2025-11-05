@@ -2,7 +2,7 @@ services:
   frontend:
     build: .
     ports:
-      - "500:3000"
+      - "500:80"  # Map external 500 to internal 80
     container_name: frontend-app
     restart: unless-stopped
     depends_on:
@@ -16,7 +16,3 @@ services:
       - ./backend/.env
     container_name: backend-app
     restart: unless-stopped
-    # Removed dependency on clickhouse since using cloud version
-
-# Removed clickhouse and clickhouse-gui services
-# Removed volumes section
