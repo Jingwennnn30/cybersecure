@@ -49,7 +49,7 @@ function Dashboard({ darkMode, setDarkMode }) {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const res = await fetch('http://localhost:4000/api/dashboard-stats');
+        const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:4000'}/api/dashboard-stats`);
         if (res.ok) {
           const data = await res.json();
           setStats({
@@ -78,7 +78,7 @@ function Dashboard({ darkMode, setDarkMode }) {
   useEffect(() => {
     const fetchAlerts = async () => {
       try {
-        const res = await fetch('http://localhost:4000/api/alerts');
+        const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:4000'}/api/alerts`);
         if (res.ok) {
           const data = await res.json();
           setLiveAlerts(Array.isArray(data) ? data : []);
