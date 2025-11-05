@@ -19,7 +19,7 @@ function Alerts({ darkMode, setDarkMode }) {
     const [toDate, setToDate] = useState("");
 
     useEffect(() => {
-        fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:4000'}/api/alerts`)
+        const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:4000'}/api/alerts`);
             .then(res => res.json())
             .then(data => {
                 // Ensure data is always an array
