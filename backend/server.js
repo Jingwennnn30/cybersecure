@@ -51,6 +51,18 @@ app.use(express.json());
 // Also support URL-encoded bodies (some tools default to this)
 app.use(express.urlencoded({ extended: true }));
 
+// Make ClickHouse client available to routes
+app.locals.clickhouseClient = client;
+
+// Initialize Chatbot Service with MCP
+const ChatbotService = require('./services/chatbotService');
+const chatbotService = new ChatbotService(client);
+console.log('✓ Chatbot Service initialized with MCP protocol');
+
+// Import and use chatbot routes
+const chatbotRouter = require('./routes/chatbot')(chatbotService);
+app.use('/api', chatbotRouter);
+
 // Simple request logger to help debug routing issues (method + path)
 app.use((req, res, next) => {
   try {
