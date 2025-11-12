@@ -65,7 +65,12 @@ function FloatingChatbot() {
         const chat = chatHistory.find(c => c.id === chatId);
         if (chat) {
             setCurrentChatId(chatId);
-            setMessages(chat.messages);
+            // Convert timestamp strings back to Date objects
+            const messagesWithDates = chat.messages.map(msg => ({
+                ...msg,
+                timestamp: new Date(msg.timestamp)
+            }));
+            setMessages(messagesWithDates);
         }
     };
 
@@ -114,6 +119,20 @@ function FloatingChatbot() {
         } else if (isOpen && !currentChatId && chatHistory.length > 0) {
             loadChat(chatHistory[0].id);
         }
+    }, [isOpen]);
+
+    // Prevent body scroll when chatbot is open
+    useEffect(() => {
+        if (isOpen) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = 'unset';
+        }
+        
+        // Cleanup when component unmounts
+        return () => {
+            document.body.style.overflow = 'unset';
+        };
     }, [isOpen]);
 
     const handleSendMessage = async () => {
@@ -204,9 +223,17 @@ function FloatingChatbot() {
                 )}
             </button>
 
-            {/* Chat Window - Bigger with Sidebar */}
+            {/* Modal Overlay - Freezes background */}
             {isOpen && (
-                <div className="fixed bottom-24 right-6 w-[800px] h-[700px] bg-white dark:bg-gray-800 rounded-2xl shadow-2xl flex z-50 border border-gray-200 dark:border-gray-700">
+                <>
+                    {/* Dark overlay that blocks interaction with background */}
+                    <div 
+                        className="fixed inset-0 bg-black bg-opacity-50 z-40"
+                        onClick={() => setIsOpen(false)}
+                    ></div>
+
+                    {/* Chat Window - Bigger with Sidebar */}
+                    <div className="fixed inset-4 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl flex z-50 border border-gray-200 dark:border-gray-700 overflow-hidden" style={{ maxWidth: '1200px', margin: 'auto' }}>
                     {/* Sidebar - Chat History */}
                     <div className="w-64 bg-gray-50 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 rounded-l-2xl flex flex-col">
                         {/* Sidebar Header */}
@@ -223,7 +250,7 @@ function FloatingChatbot() {
                         </div>
 
                         {/* Chat History List */}
-                        <div className="flex-1 overflow-y-auto p-2">
+                        <div className="flex-1 overflow-y-auto p-2" style={{ scrollbarWidth: 'thin' }}>
                             {chatHistory.length === 0 ? (
                                 <p className="text-center text-gray-500 text-sm mt-4">No chat history</p>
                             ) : (
@@ -231,7 +258,7 @@ function FloatingChatbot() {
                                     <div
                                         key={chat.id}
                                         onClick={() => loadChat(chat.id)}
-                                        className={`p-3 mb-2 rounded-lg cursor-pointer transition-colors group ${
+                                        className={`p-2.5 mb-2 rounded-lg cursor-pointer transition-colors group ${
                                             currentChatId === chat.id
                                                 ? "bg-yellow-100 dark:bg-yellow-900"
                                                 : "hover:bg-gray-100 dark:hover:bg-gray-800"
@@ -260,17 +287,17 @@ function FloatingChatbot() {
                     </div>
 
                     {/* Main Chat Area */}
-                    <div className="flex-1 flex flex-col">
+                    <div className="flex-1 flex flex-col" style={{ height: '100%', overflow: 'hidden' }}>
                         {/* Header */}
-                        <div className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white p-4 rounded-tr-2xl flex items-center justify-between">
+                        <div className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white p-3 rounded-tr-2xl flex items-center justify-between flex-shrink-0">
                             <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                <div className="w-9 h-9 bg-white/20 rounded-full flex items-center justify-center">
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
                                     </svg>
                                 </div>
                                 <div>
-                                    <h3 className="font-semibold text-lg">AI Assistant</h3>
+                                    <h3 className="font-semibold text-base">AI Assistant</h3>
                                     <p className="text-xs text-yellow-100">Security Analysis Expert</p>
                                 </div>
                             </div>
@@ -282,28 +309,35 @@ function FloatingChatbot() {
 
                         {/* Messages Area with Fixed Scroll */}
                         <div 
-                            className="flex-1 overflow-y-scroll p-4 bg-gray-50 dark:bg-gray-900 space-y-3"
+                            className="overflow-y-auto p-4 bg-white dark:bg-gray-900"
                             style={{ 
-                                overflowY: 'scroll',
-                                height: '100%',
-                                scrollBehavior: 'smooth'
+                                flex: '1 1 auto',
+                                minHeight: 0,
+                                height: 0,
+                                scrollbarWidth: 'thin',
+                                scrollbarColor: '#fbbf24 #ffffff'
                             }}
                         >
+                            <div className="space-y-4 max-w-4xl mx-auto">
                             {messages.map((message) => (
                                 <div
                                     key={message.id}
                                     className={`flex ${message.type === "user" ? "justify-end" : "justify-start"}`}
                                 >
                                     <div
-                                        className={`max-w-[80%] rounded-lg p-3 shadow-sm ${
+                                        className={`max-w-[75%] rounded-2xl px-4 py-3 shadow-md ${
                                             message.type === "user"
-                                                ? "bg-blue-600 text-white"
-                                                : "bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700"
+                                                ? "bg-gradient-to-r from-yellow-300 via-yellow-400 to-orange-400"
+                                                : "bg-gray-50 dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600"
                                         }`}
                                     >
-                                        <p className="text-sm whitespace-pre-wrap font-medium">{message.content}</p>
-                                        <p className={`text-xs mt-1 ${message.type === "user" ? "text-blue-100" : "text-gray-400"}`}>
-                                            {message.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                        <p className={`text-base whitespace-pre-wrap leading-relaxed font-semibold ${
+                                            message.type === "user" ? "text-gray-800" : "text-gray-900 dark:text-gray-100"
+                                        }`}>
+                                            {message.content}
+                                        </p>
+                                        <p className={`text-xs mt-2 font-medium ${message.type === "user" ? "text-gray-700" : "text-gray-600 dark:text-gray-400"}`}>
+                                            {new Date(message.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                                         </p>
                                     </div>
                                 </div>
@@ -322,15 +356,16 @@ function FloatingChatbot() {
                             )}
 
                             <div ref={messagesEndRef} />
+                            </div>
                         </div>
 
                         {/* Input Area */}
-                        <div className="p-3 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 rounded-br-2xl">
-                            <div className="flex items-center gap-2">
+                        <div className="p-3 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 rounded-br-2xl flex-shrink-0">
+                            <div className="flex items-center gap-3 max-w-4xl mx-auto">
                                 <input
                                     type="text"
-                                    className="flex-1 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                                    placeholder="Type your message..."
+                                    className="flex-1 border-2 border-gray-300 dark:border-gray-600 rounded-xl px-4 py-2.5 text-base bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 font-medium"
+                                    placeholder="Ask me about security alerts, threats, or recommendations..."
                                     value={inputMessage}
                                     onChange={(e) => setInputMessage(e.target.value)}
                                     onKeyPress={handleKeyPress}
@@ -339,7 +374,7 @@ function FloatingChatbot() {
                                 <button
                                     onClick={handleSendMessage}
                                     disabled={isLoading || !inputMessage.trim()}
-                                    className="bg-orange-500 hover:bg-orange-600 disabled:bg-gray-400 text-white p-2 rounded-lg transition-colors"
+                                    className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 disabled:from-gray-400 disabled:to-gray-400 text-white p-2.5 rounded-xl transition-all shadow-md hover:shadow-lg disabled:shadow-none"
                                 >
                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
@@ -352,6 +387,7 @@ function FloatingChatbot() {
                         </div>
                     </div>
                 </div>
+                </>
             )}
         </>
     );
