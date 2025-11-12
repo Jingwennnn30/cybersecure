@@ -1,6 +1,6 @@
 import React from 'react';
 import Navigation from './Navigation';
-import AIChatbot from './AIChatbot';
+import FloatingChatbot from './FloatingChatbot';
 
 function Layout({ title, description, children }) {
   return (
@@ -36,7 +36,7 @@ function Layout({ title, description, children }) {
         </main>
 
         {/* AI Chatbot */}
-        <AIChatbot />
+        <FloatingChatbot />
       </div>
     </div>
   );

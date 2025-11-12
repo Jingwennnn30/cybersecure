@@ -3,7 +3,7 @@ import { Card, Title, Text, Grid, Metric, AreaChart } from '@tremor/react';
 import Navigation from '../components/Navigation';
 import { SunIcon, MoonIcon, LinkIcon, BellIcon, XMarkIcon } from '@heroicons/react/24/solid';
 import { EnvelopeIcon } from '@heroicons/react/24/outline';
-import AIChatbot from '../components/AIChatbot';
+import FloatingChatbot from '../components/FloatingChatbot';
 import { collection, getDocs, updateDoc, doc } from "firebase/firestore";
 import { db } from "../firebase";
 import { useRole } from '../contexts/RoleContext';
@@ -646,9 +646,9 @@ function Dashboard({ darkMode, setDarkMode }) {
             )}
           </Card>
         </main>
-        {/* AI Chatbot (always visible, fixed position) */}
-        <AIChatbot />
       </div>
+      {/* Floating AI Chatbot (always visible, fixed position) */}
+      <FloatingChatbot />
     </div>
   );
 }
