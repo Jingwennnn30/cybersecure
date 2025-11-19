@@ -85,8 +85,18 @@ export default function Login() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
-            <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-md w-full max-w-md">
+        <div className="min-h-screen flex items-center justify-center relative">
+            {/* Background Image */}
+            <div 
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: "url('/images/cs2.jpg')" }}
+            >
+                {/* Semi-transparent Overlay */}
+                <div className="absolute inset-0 bg-black bg-opacity-50"></div>
+            </div>
+            
+            {/* Login Form */}
+            <div className="relative z-10 bg-white dark:bg-gray-800 p-8 rounded-lg shadow-2xl w-full max-w-md backdrop-blur-sm bg-opacity-95 dark:bg-opacity-95">
                 <h2 className="text-2xl font-bold mb-6 text-center text-gray-900 dark:text-gray-100">Sign In</h2>
                 <form onSubmit={handleLogin} className="space-y-4">
                     <div>
