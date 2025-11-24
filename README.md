@@ -1,68 +1,110 @@
-# Cybersecure Project
+# 🛡️ CyberSecure
 
-## Overview
-This project is a web application built using React and Tailwind CSS. It serves as a platform for demonstrating various features related to cybersecurity.
+AI-Powered Security Analysis Dashboard for real-time threat monitoring and intelligent threat assessment.
 
-## Technologies Used
-- **React**: A JavaScript library for building user interfaces.
-- **Tailwind CSS**: A utility-first CSS framework for styling.
-- **PostCSS**: A tool for transforming CSS with JavaScript plugins.
+## 📌 Description
 
-## Project Structure
+CyberSecure is a comprehensive security analysis platform that combines real-time threat monitoring with AI-powered insights. Built for security analysts and IT professionals, it provides actionable intelligence for network security management through an intuitive dashboard interface.
+
+**Academic Project:** Final Year Project (WIA3002) - University of Malaya
+
+## ✨ Key Features
+
+- **Real-time Alert Monitoring** - Live security alerts from Suricata IDS
+- **AI-Powered Chatbot** - Interactive assistant using OpenAI GPT with Model Context Protocol (MCP)
+- **Role-Based Access Control** - Admin, Analyst, and Viewer roles with Firebase authentication
+- **Google Sign-In** - One-click authentication
+- **Historical Analysis** - 2-month alert trends and severity distribution
+- **Telegram Integration** - Instant alert notifications
+- **Dark/Light Mode** - User-friendly theme switching
+
+## 🛠️ Tech Stack
+
+### Frontend
+- **React 18** - UI library
+- **Tailwind CSS** - Styling framework
+- **React Router** - Navigation
+- **Recharts** - Data visualization
+- **Firebase** - Authentication & Firestore database
+
+### Backend
+- **Node.js & Express** - REST API server
+- **Firebase Admin SDK** - Backend authentication
+- **ClickHouse** - Analytics database
+- **OpenAI API** - GPT-4 integration
+- **WebSocket** - Real-time communication
+
+### Infrastructure
+- **Docker & Docker Compose** - Containerization
+- **Nginx** - Reverse proxy
+- **n8n** - Workflow automation
+
+## 📁 Project Structure
+
 ```
-cybersecure
-├── src
-│   ├── App.jsx
-│   ├── index.jsx
-│   ├── components
-│   │   └── ExampleComponent.jsx
-│   └── styles
-│       └── tailwind.css
-├── public
+cybersecure/
+├── public/
+│   ├── images/              # Assets
 │   └── index.html
-├── tailwind.config.js
-├── package.json
-├── postcss.config.js
-├── README.md
+├── src/
+│   ├── components/          # Reusable components
+│   │   ├── FloatingChatbot.jsx
+│   │   ├── Layout.jsx
+│   │   └── Navigation.jsx
+│   ├── pages/               # Page components
+│   │   ├── Dashboard.jsx
+│   │   ├── Alerts.jsx
+│   │   ├── Login.jsx
+│   │   ├── Signup.jsx
+│   │   └── Roles.jsx
+│   ├── context/             # React Context
+│   ├── firebase.js          # Firebase configuration
+│   └── App.jsx
+├── backend/
+│   ├── services/
+│   │   ├── chatbotService.js    # AI chatbot
+│   │   ├── mcpService.js        # MCP protocol
+│   │   └── clickhouseService.js # Database
+│   ├── routes/              # API routes
+│   ├── server.js            # Express server
+│   └── package.json
+├── docker-compose.yml
+├── nginx.conf
+└── README.md
 ```
 
-## Getting Started
+## 📖 Usage
 
-### Prerequisites
-- Node.js and npm installed on your machine.
+### User Roles
+- **Admin** - Full access to all features
+- **Analyst** - View and analyze alerts
+- **Viewer** - Read-only access
 
-### Installation
-1. Clone the repository:
-   ```
-   git clone <repository-url>
-   ```
-2. Navigate to the project directory:
-   ```
-   cd cybersecure
-   ```
-3. Install the dependencies:
-   ```
-   npm install
-   ```
+### AI Assistant
+Ask questions like:
+- "Show me critical alerts from today"
+- "What are the top threats this week?"
+- "Explain this SURICATA alert"
+- "Give me security recommendations"
 
-### Running the Application
-To start the development server, run:
-```
-npm start
-```
-This will launch the application in your default web browser.
+## 🔒 Security
 
-### Building for Production
-To create a production build, run:
-```
-npm run build
-```
+- Environment variables for sensitive data
+- Firebase security rules
+- Role-based access control
+- Input validation and sanitization
 
-## Usage
-The main component of the application is `App.jsx`, which imports and renders other components, such as `ExampleComponent.jsx`. The application is styled using Tailwind CSS, which is imported in `index.jsx`.
 
-## Contributing
-Contributions are welcome! Please open an issue or submit a pull request for any enhancements or bug fixes.
+## 👥 Contact
 
-## License
-This project is licensed under the MIT License.
+**Developer:** Wong Jing Wen 
+**Email:** wongjingwen1234@gmail.com 
+**GitHub:** [@Jingwennnn30](https://github.com/Jingwennnn30)
+
+**Developer:** Wong Yi Han
+**Email:** wongyihan2003@gmail.com
+**GitHub:** [@yihanwong](https://github.com/yihanwong)
+
+---
+
+⭐ Star this repository if you find it helpful!
