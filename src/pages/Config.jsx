@@ -61,9 +61,18 @@ function Config({ darkMode, setDarkMode }) {
     const [saveEmailMsg, setSaveEmailMsg] = useState('');
     const [editEmail, setEditEmail] = useState(false);
 
+    // AI Configuration state
+    const [aiModel, setAiModel] = useState('openai');
+    const [aiEndpoint, setAiEndpoint] = useState('https://api.openai.com/v1/chat/completions');
+    const [aiApiKey, setAiApiKey] = useState('sk-proj-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'); // Fake encrypted display
+    const [savingAI, setSavingAI] = useState(false);
+    const [saveAIMsg, setSaveAIMsg] = useState('');
+    const [editAI, setEditAI] = useState(false);
+
     // Store original values for cancel
     const [originalTelegram, setOriginalTelegram] = useState({});
     const [originalEmail, setOriginalEmail] = useState({});
+    const [originalAI, setOriginalAI] = useState({});
 
     // Load existing settings on mount
     useEffect(() => {
@@ -88,6 +97,16 @@ function Config({ darkMode, setDarkMode }) {
                         smtpPort: data.smtpPort || '',
                         emailFrom: data.emailFrom || '',
                         emailPassword: data.emailPassword || ''
+                    });
+                    // AI Configuration (always show default values, actual key is in backend)
+                    setAiModel(data.aiModel || 'openai');
+                    setAiEndpoint(data.aiEndpoint || 'https://api.openai.com/v1/chat/completions');
+                    // Always show fake encrypted key, real one is in backend/.env
+                    setAiApiKey('sk-proj-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx');
+                    setOriginalAI({
+                        aiModel: data.aiModel || 'openai',
+                        aiEndpoint: data.aiEndpoint || 'https://api.openai.com/v1/chat/completions',
+                        aiApiKey: 'sk-proj-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
                     });
                 }
             } catch (err) {
@@ -149,6 +168,34 @@ function Config({ darkMode, setDarkMode }) {
         setEmailPassword(originalEmail.emailPassword);
         setEditEmail(false);
         setSaveEmailMsg('');
+    };
+
+    // Save AI settings handler
+    const handleSaveAI = async () => {
+        setSavingAI(true);
+        setSaveAIMsg('');
+        try {
+            await setDoc(doc(db, "config", "system"), {
+                aiModel,
+                aiEndpoint
+                // Note: API key is NOT saved to Firestore, it stays in backend/.env
+            }, { merge: true });
+            setSaveAIMsg('AI configuration saved! (API key managed in backend)');
+            setEditAI(false);
+            setOriginalAI({ aiModel, aiEndpoint, aiApiKey });
+        } catch (err) {
+            setSaveAIMsg('Error saving: ' + err.message);
+        }
+        setSavingAI(false);
+    };
+
+    // Cancel AI edit handler
+    const handleCancelAI = () => {
+        setAiModel(originalAI.aiModel);
+        setAiEndpoint(originalAI.aiEndpoint);
+        setAiApiKey(originalAI.aiApiKey);
+        setEditAI(false);
+        setSaveAIMsg('');
     };
 
     // Edit icon SVG
@@ -360,31 +407,81 @@ function Config({ darkMode, setDarkMode }) {
 
                     {/* AI Model Settings */}
                     <Card className="mb-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
-                        <Title className="text-gray-900 dark:text-gray-100">AI Configuration</Title>
+                        <div className="flex items-center justify-between">
+                            <Title className="text-gray-900 dark:text-gray-100">AI Configuration</Title>
+                            {!editAI && (
+                                <span onClick={() => setEditAI(true)}>{EditIcon}</span>
+                            )}
+                        </div>
                         <div className="mt-4 space-y-4">
                             <div>
                                 <Text className="text-gray-700 dark:text-gray-200">Model Selection</Text>
-                                <Select className="mt-2" placeholder="Select AI model">
-                                    <SelectItem value="granite">IBM Granite</SelectItem>
-                                    <SelectItem value="custom">Custom Model</SelectItem>
-                                </Select>
+                                {editAI ? (
+                                    <Select 
+                                        className="mt-2" 
+                                        value={aiModel}
+                                        onValueChange={setAiModel}
+                                    >
+                                        <SelectItem value="openai">OpenAI GPT</SelectItem>
+                                        <SelectItem value="granite">IBM Granite</SelectItem>
+                                        <SelectItem value="custom">Custom Model</SelectItem>
+                                    </Select>
+                                ) : (
+                                    <div className="mt-2 px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-gray-800 dark:text-gray-200">
+                                        {aiModel === 'openai' ? 'OpenAI GPT' : aiModel === 'granite' ? 'IBM Granite' : 'Custom Model'}
+                                    </div>
+                                )}
                             </div>
                             <div>
                                 <Text className="text-gray-700 dark:text-gray-200">API Endpoint</Text>
-                                <TextInput
-                                    placeholder="https://api.example.com/v1/ai"
-                                    className="mt-2"
-                                />
+                                {editAI ? (
+                                    <TextInput
+                                        placeholder="https://api.openai.com/v1/chat/completions"
+                                        className="mt-2"
+                                        value={aiEndpoint}
+                                        onChange={e => setAiEndpoint(e.target.value)}
+                                    />
+                                ) : (
+                                    <div className="mt-2 px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-gray-800 dark:text-gray-200 break-all">
+                                        {aiEndpoint}
+                                    </div>
+                                )}
                             </div>
                             <div>
                                 <Text className="text-gray-700 dark:text-gray-200">API Key</Text>
-                                <TextInput
-                                    type="password"
-                                    placeholder="Enter your API key"
-                                    className="mt-2"
-                                />
+                                <div className="mt-2 px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-gray-800 dark:text-gray-200 break-all flex items-center justify-between">
+                                    <span className="font-mono text-sm">••••••••••••••••••••••••••••••••••••••••••••••••••••</span>
+                                    <span className="text-xs text-gray-500 dark:text-gray-400 ml-2">(Managed in backend)</span>
+                                </div>
+                                <Text className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                    API key is securely stored in backend environment variables and cannot be viewed or edited from the frontend.
+                                </Text>
                             </div>
-                            <Button size="sm" color="amber">Save AI Settings</Button>
+                            {editAI && (
+                                <div className="flex gap-2 mt-2">
+                                    <Button
+                                        size="sm"
+                                        color="amber"
+                                        onClick={handleSaveAI}
+                                        loading={savingAI}
+                                    >
+                                        Save AI Settings
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        color="gray"
+                                        onClick={handleCancelAI}
+                                        disabled={savingAI}
+                                    >
+                                        Cancel
+                                    </Button>
+                                </div>
+                            )}
+                            {saveAIMsg && (
+                                <div className="mt-2 text-sm" style={{ color: saveAIMsg.startsWith('Error') ? 'red' : 'green' }}>
+                                    {saveAIMsg}
+                                </div>
+                            )}
                         </div>
                     </Card>
                 </main>

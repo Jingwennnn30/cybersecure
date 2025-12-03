@@ -166,7 +166,7 @@ app.get('/api/dashboard-stats', async (req, res) => {
     const alertsTodayQuery = await client.query({
       query: `
         SELECT COUNT(*) as count 
-        FROM alerts 
+        FROM enriched_alerts 
         WHERE toDate(toTimeZone(timestamp, 'Asia/Kuala_Lumpur')) = toDate(now('Asia/Kuala_Lumpur'))
       `
     });
@@ -177,7 +177,7 @@ app.get('/api/dashboard-stats', async (req, res) => {
     const criticalAlertsQuery = await client.query({
       query: `
         SELECT COUNT(*) as count 
-        FROM alerts 
+        FROM enriched_alerts 
         WHERE lower(severity) IN ('high', 'critical')
       `
     });
@@ -188,7 +188,7 @@ app.get('/api/dashboard-stats', async (req, res) => {
     const yesterdayAlertsQuery = await client.query({
       query: `
         SELECT COUNT(*) as count 
-        FROM alerts 
+        FROM enriched_alerts 
         WHERE toDate(toTimeZone(timestamp, 'Asia/Kuala_Lumpur')) = toDate(now('Asia/Kuala_Lumpur')) - 1
       `
     });
@@ -205,7 +205,7 @@ app.get('/api/dashboard-stats', async (req, res) => {
         SELECT 
           toStartOfMonth(toTimeZone(timestamp, 'Asia/Kuala_Lumpur')) as month,
           count() as Alerts
-        FROM alerts
+        FROM enriched_alerts
         WHERE toTimeZone(timestamp, 'Asia/Kuala_Lumpur') >= toStartOfMonth(now('Asia/Kuala_Lumpur')) - INTERVAL 1 MONTH
         GROUP BY month
         ORDER BY month ASC
@@ -223,7 +223,7 @@ app.get('/api/dashboard-stats', async (req, res) => {
         SELECT 
           severity,
           count() as count
-        FROM alerts
+        FROM enriched_alerts
         GROUP BY severity
         ORDER BY count DESC
       `
@@ -271,15 +271,31 @@ app.get('/api/alerts', async (req, res) => {
     const result = await client.query({
       query: `
         SELECT 
+          alert_id,
+          timestamp,
           ip,
+          ip_type,
           port,
           severity,
           risk_score,
+          rule_name as name,
+          signature,
           reason,
-          timestamp,
-          name
-        FROM alerts 
+          port_type,
+          time_category,
+          direction,
+          packets,
+          bytes,
+          avg_packet_size,
+          anomaly_score,
+          src_country,
+          src_city,
+          dst_country,
+          dst_city
+        FROM enriched_alerts 
+        WHERE timestamp > '1970-01-01 00:00:01'
         ORDER BY timestamp DESC
+        LIMIT 1000
       `,
       format: 'JSONEachRow'
     });

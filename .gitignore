@@ -6,8 +6,12 @@ build/
 logs
 *.log
 
+backend/serviceAccountKey.json
+
 # dotenv
 .env
+backend/.env
+**/.env
 
 # Docker
 *.pid

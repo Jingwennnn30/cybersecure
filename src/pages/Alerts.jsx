@@ -316,11 +316,11 @@ function Alerts({ darkMode, setDarkMode }) {
                                     <div className="mb-4 flex flex-wrap gap-6">
                                         <div>
                                             <div className="text-xs text-gray-500 dark:text-gray-400">IP</div>
-                                            <div className="font-semibold">{selectedAlert.ip}</div>
+                                            <div className="font-semibold">{selectedAlert.ip || 'N/A'}</div>
                                         </div>
                                         <div>
                                             <div className="text-xs text-gray-500 dark:text-gray-400">Port</div>
-                                            <div className="font-semibold">{selectedAlert.port}</div>
+                                            <div className="font-semibold">{selectedAlert.port || 'N/A'}</div>
                                         </div>
                                         <div>
                                             <div className="text-xs text-gray-500 dark:text-gray-400">Severity</div>
@@ -333,38 +333,38 @@ function Alerts({ darkMode, setDarkMode }) {
                                                             ? "bg-yellow-200 text-yellow-800"
                                                             : "bg-green-200 text-green-800"
                                                 }`}>
-                                                {selectedAlert.severity}
+                                                {selectedAlert.severity || 'N/A'}
                                             </span>
                                         </div>
                                         <div>
                                             <div className="text-xs text-gray-500 dark:text-gray-400">Risk Score</div>
-                                            <div className="font-semibold">{selectedAlert.risk_score}</div>
+                                            <div className="font-semibold">{selectedAlert.risk_score || 'N/A'}</div>
+                                        </div>
+                                    </div>
+                                    <div className="mb-4">
+                                        <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Rule Name</div>
+                                        <div className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                                            {selectedAlert.name || selectedAlert.rule_name || 'N/A'}
                                         </div>
                                     </div>
                                     <div className="mb-4">
                                         <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Reason</div>
-                                        <div className="text-sm text-gray-800 dark:text-gray-200">{selectedAlert.reason}</div>
+                                        <div className="text-sm text-gray-800 dark:text-gray-200">
+                                            {selectedAlert.reason || 'No reason provided'}
+                                        </div>
                                     </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                         <div>
-                                            <div className="text-xs text-gray-500 dark:text-gray-400">Threat Category</div>
-                                            <div className="font-semibold">{selectedAlert.threat_category}</div>
+                                            <div className="text-xs text-gray-500 dark:text-gray-400">Port Type</div>
+                                            <div className="font-semibold">{selectedAlert.port_type || 'N/A'}</div>
                                         </div>
                                         <div>
-                                            <div className="text-xs text-gray-500 dark:text-gray-400">Sub Type</div>
-                                            <div className="font-semibold">{selectedAlert.sub_type}</div>
+                                            <div className="text-xs text-gray-500 dark:text-gray-400">Time Category</div>
+                                            <div className="font-semibold">{selectedAlert.time_category || 'N/A'}</div>
                                         </div>
                                         <div>
-                                            <div className="text-xs text-gray-500 dark:text-gray-400">Host Name</div>
-                                            <div className="font-semibold">{selectedAlert.hostname}</div>
-                                        </div>
-                                        <div>
-                                            <div className="text-xs text-gray-500 dark:text-gray-400">Region</div>
-                                            <div className="font-semibold">{selectedAlert.region_name}</div>
-                                        </div>
-                                        <div>
-                                            <div className="text-xs text-gray-500 dark:text-gray-400">Country</div>
-                                            <div className="font-semibold">{selectedAlert.country_name}</div>
+                                            <div className="text-xs text-gray-500 dark:text-gray-400">Direction</div>
+                                            <div className="font-semibold">{selectedAlert.direction || 'N/A'}</div>
                                         </div>
                                     </div>
                                     {/* Investigate Button */}
