@@ -80,8 +80,20 @@ class MCPService {
     async getAlerts(params = {}) {
         try {
             const { severity, limit = 10, hours } = params;
-            let query = `SELECT * FROM alerts`;
-            const conditions = [];
+            let query = `
+                SELECT 
+                    alert_id,
+                    timestamp,
+                    ip,
+                    port,
+                    severity,
+                    risk_score,
+                    rule_name,
+                    reason,
+                    direction
+                FROM enriched_alerts
+            `;
+            const conditions = ['timestamp > \'1970-01-01 00:00:01\''];
 
             if (severity) {
                 conditions.push(`severity = '${severity}'`);
@@ -129,8 +141,9 @@ class MCPService {
             }
 
             let query = `
-                SELECT * FROM alerts 
-                WHERE name = '${alert_name}'
+                SELECT * FROM enriched_alerts 
+                WHERE rule_name = '${alert_name}'
+                AND timestamp > '1970-01-01 00:00:01'
             `;
 
             if (ip) {
@@ -185,19 +198,20 @@ class MCPService {
 
             let query = `
                 SELECT 
-                    threat_category,
+                    rule_name as threat_category,
                     severity,
                     COUNT(*) as count,
                     COUNT(DISTINCT ip) as unique_ips
-                FROM alerts
+                FROM enriched_alerts
                 WHERE timestamp >= now() - INTERVAL ${timeframe} HOUR
+                AND timestamp > '1970-01-01 00:00:01'
             `;
 
             if (threat_type) {
-                query += ` AND threat_category = '${threat_type}'`;
+                query += ` AND rule_name = '${threat_type}'`;
             }
 
-            query += ` GROUP BY threat_category, severity ORDER BY count DESC`;
+            query += ` GROUP BY rule_name, severity ORDER BY count DESC`;
 
             const result = await this.clickhouse.query({
                 query,
@@ -230,19 +244,22 @@ class MCPService {
             const queries = {
                 alerts_today: `
                     SELECT COUNT(*) as count 
-                    FROM alerts 
+                    FROM enriched_alerts 
                     WHERE toDate(timestamp) = today()
+                    AND timestamp > '1970-01-01 00:00:01'
                 `,
                 critical_count: `
                     SELECT COUNT(*) as count 
-                    FROM alerts 
+                    FROM enriched_alerts 
                     WHERE severity = 'critical' 
                     AND timestamp >= now() - INTERVAL 24 HOUR
+                    AND timestamp > '1970-01-01 00:00:01'
                 `,
                 severity_distribution: `
                     SELECT severity, COUNT(*) as count 
-                    FROM alerts 
-                    WHERE timestamp >= now() - INTERVAL 24 HOUR 
+                    FROM enriched_alerts 
+                    WHERE timestamp >= now() - INTERVAL 24 HOUR
+                    AND timestamp > '1970-01-01 00:00:01'
                     GROUP BY severity
                 `
             };
