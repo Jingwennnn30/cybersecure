@@ -7,3 +7,22 @@
   transition: transform 0.3s ease, background-color 0.3s;
 }
 
+/* Tremor Chart Color Overrides */
+.tremor-BarChart-bar:nth-child(1) {
+  fill: #ef4444 !important; /* red-500 */
+}
+
+.tremor-BarChart-bar:nth-child(2) {
+  fill: #10b981 !important; /* emerald-500 */
+}
+
+/* Donut Chart Colors */
+path[class*="fill-"] {
+  opacity: 1 !important;
+}
+
+.recharts-pie-sector {
+  stroke: white !important;
+  stroke-width: 2px !important;
+}
+
