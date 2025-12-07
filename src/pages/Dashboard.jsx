@@ -49,7 +49,7 @@ function Dashboard({ darkMode, setDarkMode }) {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const res = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:4000'}/api/dashboard-stats`);
+        const res = await fetch(`${window.location.protocol}//${window.location.hostname}:4000/api/dashboard-stats`);
         if (res.ok) {
           const data = await res.json();
           setStats({

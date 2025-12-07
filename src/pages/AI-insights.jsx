@@ -15,7 +15,7 @@ function AIInsights({ darkMode, setDarkMode }) {
 
   const fetchAIInsights = async () => {
     try {
-      const response = await fetch('http://localhost:4000/api/ai-insights');
+      const response = await fetch(`${window.location.protocol}//${window.location.hostname}:4000/api/ai-insights`);
       const data = await response.json();
 
       // Process category data for bar chart
