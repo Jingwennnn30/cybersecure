@@ -154,7 +154,7 @@ function FloatingChatbot() {
 
         try {
             const response = await fetch(
-                `${window.location.protocol}//${window.location.hostname}:4000/api/chatbot`,
+                '/api/chatbot',
                 {
                     method: "POST",
                     headers: {

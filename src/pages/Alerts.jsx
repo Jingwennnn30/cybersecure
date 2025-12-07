@@ -19,7 +19,7 @@ function Alerts({ darkMode, setDarkMode }) {
     const [toDate, setToDate] = useState("");
 
     useEffect(() => {
-        fetch(`${window.location.protocol}//${window.location.hostname}:4000/api/alerts`)
+        fetch('/api/alerts')
             .then(res => res.json())
             .then(data => {
                 // Ensure data is always an array

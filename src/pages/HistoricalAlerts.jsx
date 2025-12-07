@@ -33,7 +33,7 @@ function HistoricalAlerts({ darkMode, setDarkMode }) {
     useEffect(() => {
         const fetchAlerts = async () => {
             try {
-                const response = await fetch(`${window.location.protocol}//${window.location.hostname}:4000/api/alerts`);
+                const response = await fetch('/api/alerts');
                 if (response.ok) {
                     const data = await response.json();
                     setAlerts(data);
