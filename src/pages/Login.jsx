@@ -15,6 +15,20 @@ export default function Login() {
         e.preventDefault();
         setError("");
         setLoading(true);
+        
+        // Input validation
+        if (!email || email.trim() === '') {
+            setError('Please enter your email address');
+            setLoading(false);
+            return;
+        }
+        
+        if (!password || password.trim() === '') {
+            setError('Please enter your password');
+            setLoading(false);
+            return;
+        }
+        
         try {
             // 1. Sign in with Firebase Auth
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
@@ -24,21 +38,56 @@ export default function Login() {
             const userDoc = await getDoc(doc(db, "users", user.uid));
             if (!userDoc.exists()) {
                 await signOut(auth);
-                setError("User profile not found.");
+                setError("User profile not found. Please contact support.");
+                setLoading(false);
                 return;
             }
 
             const userData = userDoc.data();
             if (userData.status === "Inactive") {
                 await signOut(auth);
-                setError("Your account is inactive. Please contact the administrator.");
+                setError("Your account has been deactivated. Please contact the administrator.");
+                setLoading(false);
                 return;
             }
 
             // 3. Otherwise, allow login
             navigate("/");
         } catch (err) {
-            setError(err.message);
+            console.error('Login error:', err);
+            
+            // User-friendly error messages based on Firebase error codes
+            let userFriendlyMessage = '';
+            
+            switch (err.code) {
+                case 'auth/invalid-credential':
+                case 'auth/wrong-password':
+                case 'auth/user-not-found':
+                    userFriendlyMessage = 'Invalid email or password. Please check your credentials and try again.';
+                    break;
+                case 'auth/invalid-email':
+                    userFriendlyMessage = 'Invalid email format. Please enter a valid email address.';
+                    break;
+                case 'auth/user-disabled':
+                    userFriendlyMessage = 'This account has been disabled. Please contact support for assistance.';
+                    break;
+                case 'auth/too-many-requests':
+                    userFriendlyMessage = 'Too many failed login attempts. Please try again later or reset your password.';
+                    break;
+                case 'auth/network-request-failed':
+                    userFriendlyMessage = 'Network error. Please check your internet connection and try again.';
+                    break;
+                case 'auth/operation-not-allowed':
+                    userFriendlyMessage = 'Email/password sign-in is disabled. Please contact support.';
+                    break;
+                case 'auth/popup-closed-by-user':
+                    userFriendlyMessage = 'Sign-in was cancelled. Please try again.';
+                    break;
+                default:
+                    userFriendlyMessage = err.message || 'Login failed. Please try again.';
+            }
+            
+            setError(userFriendlyMessage);
         } finally {
             setLoading(false);
         }
@@ -71,14 +120,39 @@ export default function Login() {
                 const userData = userDoc.data();
                 if (userData.status === "Inactive") {
                     await signOut(auth);
-                    setError("Your account is inactive. Please contact the administrator.");
+                    setError("Your account has been deactivated. Please contact the administrator.");
+                    setLoading(false);
                     return;
                 }
             }
 
             navigate("/");
         } catch (err) {
-            setError(err.message);
+            console.error('Google sign-in error:', err);
+            
+            let userFriendlyMessage = '';
+            
+            switch (err.code) {
+                case 'auth/popup-closed-by-user':
+                    userFriendlyMessage = 'Sign-in was cancelled. Please try again.';
+                    break;
+                case 'auth/popup-blocked':
+                    userFriendlyMessage = 'Pop-up was blocked by your browser. Please allow pop-ups and try again.';
+                    break;
+                case 'auth/cancelled-popup-request':
+                    userFriendlyMessage = 'Only one sign-in popup is allowed at a time.';
+                    break;
+                case 'auth/account-exists-with-different-credential':
+                    userFriendlyMessage = 'An account already exists with this email using a different sign-in method.';
+                    break;
+                case 'auth/network-request-failed':
+                    userFriendlyMessage = 'Network error. Please check your connection and try again.';
+                    break;
+                default:
+                    userFriendlyMessage = err.message || 'Google sign-in failed. Please try again.';
+            }
+            
+            setError(userFriendlyMessage);
         } finally {
             setLoading(false);
         }
@@ -121,7 +195,20 @@ export default function Login() {
                             required
                         />
                     </div>
-                    {error && <div className="text-red-500 text-sm">{error}</div>}
+                    {error && (
+                        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                            <div className="flex items-start">
+                                <div className="flex-shrink-0">
+                                    <svg className="w-5 h-5 text-red-600 dark:text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                                    </svg>
+                                </div>
+                                <div className="ml-3 flex-1">
+                                    <p className="text-sm font-medium text-red-700 dark:text-red-300">{error}</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     <button
                         type="submit"
                         disabled={loading}

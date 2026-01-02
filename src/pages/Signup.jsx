@@ -16,19 +16,79 @@ export default function Signup() {
         e.preventDefault();
         setError("");
         setLoading(true);
+        
+        // Input validation
+        if (!name || name.trim() === '') {
+            setError('Please enter your name');
+            setLoading(false);
+            return;
+        }
+        
+        if (name.trim().length < 2) {
+            setError('Name must be at least 2 characters long');
+            setLoading(false);
+            return;
+        }
+        
+        if (!email || email.trim() === '') {
+            setError('Please enter your email address');
+            setLoading(false);
+            return;
+        }
+        
+        if (!password || password.trim() === '') {
+            setError('Please enter a password');
+            setLoading(false);
+            return;
+        }
+        
+        if (password.length < 6) {
+            setError('Password must be at least 6 characters long');
+            setLoading(false);
+            return;
+        }
+        
         try {
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
             // Add user to Firestore with name, email, and default role "viewer"
             await setDoc(doc(db, "users", userCredential.user.uid), {
-                name,
-                email,
+                name: name.trim(),
+                email: email.trim(),
                 role: "viewer",
                 status: "Active",
                 createdAt: new Date()
             });
             navigate("/dashboard");
         } catch (err) {
-            setError(err.message);
+            console.error('Signup error:', err);
+            
+            // User-friendly error messages based on Firebase error codes
+            let userFriendlyMessage = '';
+            
+            switch (err.code) {
+                case 'auth/email-already-in-use':
+                    userFriendlyMessage = 'This email is already registered. Please sign in or use a different email.';
+                    break;
+                case 'auth/invalid-email':
+                    userFriendlyMessage = 'Invalid email format. Please enter a valid email address.';
+                    break;
+                case 'auth/weak-password':
+                    userFriendlyMessage = 'Password is too weak. Please use at least 6 characters with a mix of letters and numbers.';
+                    break;
+                case 'auth/operation-not-allowed':
+                    userFriendlyMessage = 'Email/password sign-up is disabled. Please contact support.';
+                    break;
+                case 'auth/network-request-failed':
+                    userFriendlyMessage = 'Network error. Please check your internet connection and try again.';
+                    break;
+                case 'auth/too-many-requests':
+                    userFriendlyMessage = 'Too many requests. Please try again later.';
+                    break;
+                default:
+                    userFriendlyMessage = err.message || 'Sign up failed. Please try again.';
+            }
+            
+            setError(userFriendlyMessage);
         } finally {
             setLoading(false);
         }
@@ -60,7 +120,31 @@ export default function Signup() {
 
             navigate("/dashboard");
         } catch (err) {
-            setError(err.message);
+            console.error('Google sign-up error:', err);
+            
+            let userFriendlyMessage = '';
+            
+            switch (err.code) {
+                case 'auth/popup-closed-by-user':
+                    userFriendlyMessage = 'Sign-up was cancelled. Please try again.';
+                    break;
+                case 'auth/popup-blocked':
+                    userFriendlyMessage = 'Pop-up was blocked by your browser. Please allow pop-ups and try again.';
+                    break;
+                case 'auth/cancelled-popup-request':
+                    userFriendlyMessage = 'Only one sign-up popup is allowed at a time.';
+                    break;
+                case 'auth/account-exists-with-different-credential':
+                    userFriendlyMessage = 'An account already exists with this email using a different sign-in method. Please sign in instead.';
+                    break;
+                case 'auth/network-request-failed':
+                    userFriendlyMessage = 'Network error. Please check your connection and try again.';
+                    break;
+                default:
+                    userFriendlyMessage = err.message || 'Google sign-up failed. Please try again.';
+            }
+            
+            setError(userFriendlyMessage);
         } finally {
             setLoading(false);
         }
@@ -114,7 +198,20 @@ export default function Signup() {
                             required
                         />
                     </div>
-                    {error && <div className="text-red-500 text-sm">{error}</div>}
+                    {error && (
+                        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                            <div className="flex items-start">
+                                <div className="flex-shrink-0">
+                                    <svg className="w-5 h-5 text-red-600 dark:text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                                    </svg>
+                                </div>
+                                <div className="ml-3 flex-1">
+                                    <p className="text-sm font-medium text-red-700 dark:text-red-300">{error}</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     <button
                         type="submit"
                         disabled={loading}
