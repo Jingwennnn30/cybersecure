@@ -56,86 +56,428 @@ function Reports({ darkMode, setDarkMode }) {
         if (!report) return;
         
         // Create a printable HTML document
-        const printWindow = window.open('', '', 'width=800,height=600');
+        const printWindow = window.open('', '', 'width=1200,height=800');
         printWindow.document.write(`
             <!DOCTYPE html>
             <html>
             <head>
-                <title>Security Report - ${startDate} to ${endDate || startDate}</title>
+                <title>Security Analysis Report - ${startDate} to ${endDate || startDate}</title>
                 <style>
-                    body { font-family: Arial, sans-serif; padding: 40px; color: #333; }
-                    .header { border-bottom: 3px solid #2563eb; padding-bottom: 20px; margin-bottom: 30px; }
-                    .header h1 { color: #2563eb; margin: 0; font-size: 32px; }
-                    .header .date { color: #666; margin-top: 10px; font-size: 14px; }
-                    .summary { background: #f0f9ff; padding: 20px; border-radius: 8px; margin-bottom: 30px; border-left: 4px solid #2563eb; }
-                    .summary h2 { margin-top: 0; color: #2563eb; }
-                    .stats { display: flex; gap: 20px; margin-bottom: 30px; flex-wrap: wrap; }
-                    .stat-card { flex: 1; min-width: 150px; padding: 20px; border-radius: 8px; border: 1px solid #e5e7eb; }
-                    .stat-card.critical { background: #fef2f2; border-color: #dc2626; }
-                    .stat-card.high { background: #fff7ed; border-color: #ea580c; }
-                    .stat-card.info { background: #f5f3ff; border-color: #7c3aed; }
-                    .stat-label { font-size: 12px; color: #666; text-transform: uppercase; }
-                    .stat-value { font-size: 36px; font-weight: bold; margin-top: 5px; }
-                    .stat-card.critical .stat-value { color: #dc2626; }
-                    .stat-card.high .stat-value { color: #ea580c; }
-                    .stat-card.info .stat-value { color: #7c3aed; }
-                    .section { margin-bottom: 30px; }
-                    .section h3 { color: #2563eb; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px; }
-                    .list-item { padding: 10px; background: #f9fafb; margin: 5px 0; border-radius: 4px; font-family: monospace; }
-                    .footer { margin-top: 50px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center; color: #666; font-size: 12px; }
+                    @page {
+                        margin: 20mm 25mm;
+                        size: A4 portrait;
+                    }
+                    * {
+                        margin: 0;
+                        padding: 0;
+                        box-sizing: border-box;
+                    }
+                    body {
+                        font-family: 'Calibri', 'Arial', sans-serif;
+                        color: #1a1a1a;
+                        line-height: 1.6;
+                        background: #ffffff;
+                        font-size: 10pt;
+                    }
+                    .page {
+                        max-width: 210mm;
+                        margin: 0 auto;
+                        padding: 0;
+                        background: white;
+                    }
+                    
+                    /* Professional Letterhead */
+                    .letterhead {
+                        border-bottom: 4px solid #003d82;
+                        padding-bottom: 20px;
+                        margin-bottom: 30px;
+                    }
+                    .letterhead .company {
+                        font-size: 24pt;
+                        font-weight: 700;
+                        color: #003d82;
+                        letter-spacing: 2px;
+                        margin-bottom: 5px;
+                    }
+                    .letterhead .tagline {
+                        font-size: 9pt;
+                        color: #666666;
+                        font-weight: 400;
+                    }
+                    
+                    /* Report Title */
+                    .report-title {
+                        text-align: center;
+                        margin: 35px 0;
+                        padding: 25px;
+                        background: #f8f9fa;
+                        border-top: 3px solid #003d82;
+                        border-bottom: 3px solid #003d82;
+                    }
+                    .report-title h1 {
+                        font-size: 20pt;
+                        font-weight: 700;
+                        text-transform: uppercase;
+                        letter-spacing: 3px;
+                        color: #1a1a1a;
+                        margin-bottom: 12px;
+                    }
+                    .report-title .subtitle {
+                        font-size: 11pt;
+                        color: #555555;
+                        font-weight: 400;
+                    }
+                    
+                    /* Document Information */
+                    .doc-info {
+                        margin: 25px 0;
+                        border: 2px solid #003d82;
+                        background: #ffffff;
+                    }
+                    .doc-info table {
+                        width: 100%;
+                        border-collapse: collapse;
+                    }
+                    .doc-info td {
+                        padding: 10px 15px;
+                        font-size: 10pt;
+                        border-bottom: 1px solid #e0e0e0;
+                    }
+                    .doc-info td:first-child {
+                        font-weight: 600;
+                        width: 180px;
+                        background: #f5f6f7;
+                        color: #003d82;
+                    }
+                    .doc-info tr:last-child td {
+                        border-bottom: none;
+                    }
+                    
+                    /* Classification Banner */
+                    .classification {
+                        background: #003d82;
+                        color: #ffffff;
+                        text-align: center;
+                        padding: 8px;
+                        font-weight: 700;
+                        font-size: 10pt;
+                        letter-spacing: 4px;
+                        margin: 25px 0;
+                    }
+                    
+                    /* Section Headings */
+                    .section {
+                        margin: 30px 0;
+                        page-break-inside: avoid;
+                    }
+                    .section-title {
+                        font-size: 13pt;
+                        font-weight: 700;
+                        text-transform: uppercase;
+                        letter-spacing: 1.5px;
+                        color: #003d82;
+                        border-bottom: 3px solid #003d82;
+                        padding-bottom: 8px;
+                        margin-bottom: 18px;
+                    }
+                    
+                    /* Executive Summary Box */
+                    .executive-summary {
+                        border: 2px solid #003d82;
+                        padding: 25px;
+                        margin: 25px 0;
+                        background: #f8f9fa;
+                    }
+                    .executive-summary .summary-title {
+                        font-size: 12pt;
+                        font-weight: 700;
+                        margin-bottom: 15px;
+                        text-transform: uppercase;
+                        letter-spacing: 1.5px;
+                        color: #003d82;
+                    }
+                    .executive-summary p {
+                        text-align: justify;
+                        line-height: 1.7;
+                        color: #2a2a2a;
+                    }
+                    
+                    /* Statistics Table */
+                    .stats-table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin: 18px 0;
+                        border: 2px solid #003d82;
+                    }
+                    .stats-table th {
+                        background: #003d82;
+                        color: #ffffff;
+                        padding: 12px;
+                        text-align: left;
+                        font-size: 10pt;
+                        font-weight: 700;
+                        text-transform: uppercase;
+                        letter-spacing: 1px;
+                    }
+                    .stats-table td {
+                        padding: 12px;
+                        border: 1px solid #d0d0d0;
+                        font-size: 10pt;
+                    }
+                    .stats-table tr:nth-child(even) {
+                        background: #f8f9fa;
+                    }
+                    .stats-table .value-cell {
+                        font-weight: 700;
+                        text-align: center;
+                        font-size: 16pt;
+                        color: #003d82;
+                    }
+                    
+                    /* Data Tables */
+                    .data-table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin: 18px 0;
+                        font-size: 9pt;
+                        border: 1px solid #d0d0d0;
+                    }
+                    .data-table th {
+                        background: #e8ecef;
+                        padding: 10px;
+                        text-align: left;
+                        font-weight: 700;
+                        border: 1px solid #a0a0a0;
+                        font-size: 9pt;
+                        color: #1a1a1a;
+                    }
+                    .data-table td {
+                        padding: 10px;
+                        border: 1px solid #d0d0d0;
+                        vertical-align: top;
+                    }
+                    .data-table tr:nth-child(even) {
+                        background: #f8f9fa;
+                    }
+                    
+                    /* Recommendations List */
+                    .recommendations {
+                        margin: 18px 0;
+                    }
+                    .recommendation-item {
+                        padding: 12px 12px 12px 35px;
+                        margin-bottom: 10px;
+                        border-left: 4px solid #003d82;
+                        background: #f8f9fa;
+                        position: relative;
+                        text-align: justify;
+                    }
+                    .recommendation-item::before {
+                        content: "▪";
+                        position: absolute;
+                        left: 15px;
+                        font-weight: 700;
+                        color: #003d82;
+                        font-size: 12pt;
+                    }
+                    
+                    /* Footer */
+                    .report-footer {
+                        margin-top: 45px;
+                        padding-top: 18px;
+                        border-top: 3px solid #003d82;
+                        font-size: 8pt;
+                        color: #666666;
+                    }
+                    .footer-row {
+                        display: flex;
+                        justify-content: space-between;
+                        margin-bottom: 6px;
+                    }
+                    .confidential-footer {
+                        text-align: center;
+                        font-size: 8pt;
+                        color: #888888;
+                        margin-top: 12px;
+                        padding-top: 12px;
+                        border-top: 1px solid #d0d0d0;
+                        line-height: 1.4;
+                    }
+                    
+                    @media print {
+                        body { font-size: 10pt; }
+                        .page { padding: 0; }
+                    }
                 </style>
             </head>
             <body>
-                <div class="header">
-                    <h1>🛡️ Security Report</h1>
-                    <div class="date">Report Period: ${startDate} to ${endDate || startDate}</div>
-                    <div class="date">Generated: ${new Date().toLocaleString()}</div>
-                </div>
-                
-                <div class="summary">
-                    <h2>Executive Summary</h2>
-                    <p>${report.summary || 'No summary available'}</p>
-                </div>
-                
-                <div class="stats">
-                    <div class="stat-card critical">
-                        <div class="stat-label">Critical Alerts</div>
-                        <div class="stat-value">${report.counts?.critical || 0}</div>
+                <div class="page">
+                    <!-- Letterhead -->
+                    <div class="letterhead">
+                        <div class="company">CYBERSECURE</div>
+                        <div class="tagline">Security Intelligence & Threat Analysis Division</div>
                     </div>
-                    <div class="stat-card high">
-                        <div class="stat-label">High Priority</div>
-                        <div class="stat-value">${report.counts?.high || 0}</div>
+                    
+                    <!-- Classification -->
+                    <div class="classification">CONFIDENTIAL</div>
+                    
+                    <!-- Report Title -->
+                    <div class="report-title">
+                        <h1>Security Analysis Report</h1>
+                        <div class="subtitle">Comprehensive Threat Assessment and Incident Analysis</div>
                     </div>
-                    <div class="stat-card info">
-                        <div class="stat-label">Unique IPs</div>
-                        <div class="stat-value">${report.unique_ips?.length || 0}</div>
+                    
+                    <!-- Document Information -->
+                    <div class="doc-info">
+                        <table>
+                            <tr>
+                                <td>Report ID:</td>
+                                <td>CSR-${Date.now().toString().slice(-8)}</td>
+                            </tr>
+                            <tr>
+                                <td>Reporting Period:</td>
+                                <td>${startDate} to ${endDate || startDate}</td>
+                            </tr>
+                            <tr>
+                                <td>Date of Issue:</td>
+                                <td>${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</td>
+                            </tr>
+                            <tr>
+                                <td>Time Generated:</td>
+                                <td>${new Date().toLocaleTimeString('en-US')}</td>
+                            </tr>
+                            <tr>
+                                <td>Classification:</td>
+                                <td>CONFIDENTIAL - INTERNAL USE ONLY</td>
+                            </tr>
+                        </table>
                     </div>
-                </div>
-                
-                ${report.unique_ips && report.unique_ips.length > 0 ? `
+                    
+                    <!-- Executive Summary -->
                     <div class="section">
-                        <h3>Detected IP Addresses</h3>
-                        ${report.unique_ips.map(ip => `<div class="list-item">${ip}</div>`).join('')}
+                        <div class="executive-summary">
+                            <div class="summary-title">Executive Summary</div>
+                            <p>${report.summary || 'No security incidents were detected during the reporting period. All monitored systems and networks maintained normal operational status with no unusual activity or policy violations observed.'}</p>
+                        </div>
                     </div>
-                ` : ''}
-                
-                ${report.unique_rules && report.unique_rules.length > 0 ? `
+                    
+                    <!-- Security Metrics -->
                     <div class="section">
-                        <h3>Triggered Security Rules</h3>
-                        ${report.unique_rules.map(rule => `<div class="list-item">${rule}</div>`).join('')}
+                        <div class="section-title">I. Security Metrics Overview</div>
+                        <table class="stats-table">
+                            <thead>
+                                <tr>
+                                    <th>Metric</th>
+                                    <th style="width: 120px; text-align: center;">Count</th>
+                                    <th>Classification</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>Critical Security Alerts</td>
+                                    <td class="value-cell">${report.counts?.critical || 0}</td>
+                                    <td>Immediate action required</td>
+                                </tr>
+                                <tr>
+                                    <td>High Priority Incidents</td>
+                                    <td class="value-cell">${report.counts?.high || 0}</td>
+                                    <td>Elevated risk level</td>
+                                </tr>
+                                <tr>
+                                    <td>Unique IP Addresses Detected</td>
+                                    <td class="value-cell">${report.unique_ips?.length || 0}</td>
+                                    <td>Network traffic analysis</td>
+                                </tr>
+                                <tr>
+                                    <td>Security Rules Triggered</td>
+                                    <td class="value-cell">${report.unique_rules?.length || 0}</td>
+                                    <td>Policy enforcement events</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
-                ` : ''}
-                
-                ${report.recommendations && report.recommendations.length > 0 ? `
-                    <div class="section">
-                        <h3>Recommendations</h3>
-                        ${report.recommendations.map((rec, i) => `<div class="list-item">${i + 1}. ${rec}</div>`).join('')}
+                    
+                    ${report.unique_ips && report.unique_ips.length > 0 ? `
+                        <!-- IP Address Analysis -->
+                        <div class="section">
+                            <div class="section-title">II. Network Address Analysis</div>
+                            <p style="margin-bottom: 12px; font-size: 10pt; color: #2a2a2a;">The following IP addresses were identified during the analysis period:</p>
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 50px;">No.</th>
+                                        <th>IP Address</th>
+                                        <th style="width: 120px;">Network Type</th>
+                                        <th style="width: 150px;">Classification</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${report.unique_ips.map((ip, index) => `
+                                        <tr>
+                                            <td style="text-align: center;">${index + 1}</td>
+                                            <td style="font-family: 'Courier New', monospace; font-weight: 600;">${ip}</td>
+                                            <td>${ip.startsWith('10.') || ip.startsWith('192.168.') || ip.startsWith('172.') ? 'Internal' : 'External'}</td>
+                                            <td>${ip.startsWith('10.') || ip.startsWith('192.168.') ? 'Private Network' : 'Public Internet'}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    ` : ''}
+                    
+                    ${report.unique_rules && report.unique_rules.length > 0 ? `
+                        <!-- Security Rules -->
+                        <div class="section">
+                            <div class="section-title">III. Security Policy Violations</div>
+                            <p style="margin-bottom: 12px; font-size: 10pt; color: #2a2a2a;">The following security rules were triggered during the reporting period:</p>
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 50px;">No.</th>
+                                        <th>Rule Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${report.unique_rules.map((rule, index) => `
+                                        <tr>
+                                            <td style="text-align: center;">${index + 1}</td>
+                                            <td>${rule}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    ` : ''}
+                    
+                    ${report.recommendations && report.recommendations.length > 0 ? `
+                        <!-- Recommendations -->
+                        <div class="section">
+                            <div class="section-title">IV. Recommendations & Action Items</div>
+                            <p style="margin-bottom: 12px; font-size: 10pt; color: #2a2a2a;">Based on the analysis conducted, the following recommendations are provided:</p>
+                            <div class="recommendations">
+                                ${report.recommendations.map(rec => `
+                                    <div class="recommendation-item">${rec}</div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+                    
+                    <!-- Footer -->
+                    <div class="report-footer">
+                        <div class="footer-row">
+                            <div><strong>CyberSecure</strong> | Security Intelligence Division</div>
+                            <div>Page 1 of 1</div>
+                        </div>
+                        <div class="footer-row">
+                            <div>Report Generated: ${new Date().toLocaleString('en-US')}</div>
+                            <div>Version 1.0</div>
+                        </div>
+                        <div class="confidential-footer">
+                            This document contains confidential information and is intended solely for the use of authorized personnel.
+                            <br>Unauthorized reproduction or distribution of this report is strictly prohibited.
+                            <br>© ${new Date().getFullYear()} CyberSecure. All rights reserved.
+                        </div>
                     </div>
-                ` : ''}
-                
-                <div class="footer">
-                    <p>CyberSecure - AI-Powered Security Analysis Platform</p>
-                    <p>This report is confidential and intended for authorized personnel only.</p>
                 </div>
             </body>
             </html>
