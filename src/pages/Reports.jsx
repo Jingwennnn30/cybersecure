@@ -495,53 +495,100 @@ function Reports({ darkMode, setDarkMode }) {
     const downloadCSV = () => {
         if (!report) return;
         
-        let csvContent = 'Security Report\n';
+        const reportId = `CSR-${Date.now().toString().slice(-8)}`;
+        const generatedDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
+        const generatedTime = new Date().toLocaleTimeString('en-US', { hour12: false });
+        
+        // Professional, clean CSV format for data analysis
+        let csvContent = '';
+        
+        // REPORT METADATA
+        csvContent += 'Report Type,Security Analysis Report\n';
+        csvContent += `Report ID,${reportId}\n`;
+        csvContent += `Organization,CyberSecure - Security Intelligence Division\n`;
         csvContent += `Report Period,${startDate} to ${endDate || startDate}\n`;
-        csvContent += `Generated,${new Date().toLocaleString()}\n\n`;
+        csvContent += `Generated Date,${generatedDate}\n`;
+        csvContent += `Generated Time,${generatedTime}\n`;
+        csvContent += `Classification,CONFIDENTIAL\n`;
+        csvContent += `Version,1.0\n\n`;
         
-        csvContent += 'Summary\n';
-        csvContent += `"${(report.summary || 'No summary available').replace(/"/g, '""')}"\n\n`;
+        // EXECUTIVE SUMMARY
+        csvContent += 'Executive Summary\n';
+        const summary = report.summary || 'No security incidents detected during the reporting period.';
+        csvContent += `"${summary.replace(/"/g, '""')}"\n\n`;
         
-        csvContent += 'Statistics\n';
-        csvContent += 'Metric,Count\n';
-        csvContent += `Total Alerts,${report.counts?.total_alerts || report.counts?.total || 0}\n`;
-        csvContent += `Critical,${report.counts?.critical || 0}\n`;
-        csvContent += `High,${report.counts?.high || 0}\n`;
-        csvContent += `Unique IPs,${report.unique_ips?.length || 0}\n`;
-        csvContent += `Unique Rules,${report.unique_rules?.length || 0}\n\n`;
+        // SECURITY METRICS
+        csvContent += 'Security Metrics\n';
+        csvContent += 'Metric,Count,Severity Level,Priority\n';
+        csvContent += `Total Alerts,${report.counts?.total_alerts || report.counts?.total || 0},All,N/A\n`;
+        csvContent += `Critical Alerts,${report.counts?.critical || 0},Critical,P1\n`;
+        csvContent += `High Priority Alerts,${report.counts?.high || 0},High,P2\n`;
+        csvContent += `Unique IP Addresses,${report.unique_ips?.length || 0},N/A,N/A\n`;
+        csvContent += `Unique Security Rules,${report.unique_rules?.length || 0},N/A,N/A\n\n`;
         
+        // IP ADDRESS ANALYSIS
         if (report.unique_ips && report.unique_ips.length > 0) {
-            csvContent += 'Unique IP Addresses\n';
-            csvContent += 'IP Address\n';
-            report.unique_ips.forEach(ip => {
-                csvContent += `${ip}\n`;
+            csvContent += 'IP Address Analysis\n';
+            csvContent += 'No.,IP Address,Network Type,Classification\n';
+            report.unique_ips.forEach((ip, index) => {
+                const isInternal = ip.startsWith('10.') || ip.startsWith('192.168.') || ip.startsWith('172.');
+                const networkType = isInternal ? 'Internal' : 'External';
+                const classification = ip.startsWith('10.') || ip.startsWith('192.168.') ? 'Private Network' : 'Public Internet';
+                csvContent += `${index + 1},${ip},${networkType},${classification}\n`;
             });
             csvContent += '\n';
         }
         
+        // SECURITY RULES TRIGGERED
         if (report.unique_rules && report.unique_rules.length > 0) {
-            csvContent += 'Triggered Security Rules\n';
-            csvContent += 'Rule Name\n';
-            report.unique_rules.forEach(rule => {
-                csvContent += `"${rule.replace(/"/g, '""')}"\n`;
+            csvContent += 'Security Rules Triggered\n';
+            csvContent += 'No.,Rule Name,Category\n';
+            report.unique_rules.forEach((rule, index) => {
+                // Auto-categorize based on rule name
+                let category = 'General Security';
+                if (rule.toLowerCase().includes('command') || rule.toLowerCase().includes('execution')) {
+                    category = 'Command Execution';
+                } else if (rule.toLowerCase().includes('dns')) {
+                    category = 'DNS Security';
+                } else if (rule.toLowerCase().includes('backdoor')) {
+                    category = 'Malware/Backdoor';
+                } else if (rule.toLowerCase().includes('bot') || rule.toLowerCase().includes('c2') || rule.toLowerCase().includes('c&c')) {
+                    category = 'Botnet/C2';
+                }
+                csvContent += `${index + 1},"${rule.replace(/"/g, '""')}",${category}\n`;
             });
             csvContent += '\n';
         }
         
+        // RECOMMENDATIONS
         if (report.recommendations && report.recommendations.length > 0) {
             csvContent += 'Recommendations\n';
-            csvContent += 'Recommendation\n';
-            report.recommendations.forEach(rec => {
-                csvContent += `"${rec.replace(/"/g, '""')}"\n`;
+            csvContent += 'Priority,No.,Recommendation\n';
+            report.recommendations.forEach((rec, index) => {
+                // Auto-assign priority
+                let priority = 'Medium';
+                if (rec.toLowerCase().includes('immediately') || rec.toLowerCase().includes('critical') || rec.toLowerCase().includes('isolate')) {
+                    priority = 'High';
+                } else if (rec.toLowerCase().includes('review') || rec.toLowerCase().includes('monitor')) {
+                    priority = 'Low';
+                }
+                csvContent += `${priority},${index + 1},"${rec.replace(/"/g, '""')}"\n`;
             });
+            csvContent += '\n';
         }
+        
+        // FOOTER
+        csvContent += 'Report Footer\n';
+        csvContent += `Generated By,CyberSecure Security Platform\n`;
+        csvContent += `Timestamp,${new Date().toISOString()}\n`;
+        csvContent += `Confidentiality,This report contains confidential information for authorized personnel only\n`;
         
         // Create blob and download
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
         const url = URL.createObjectURL(blob);
         link.setAttribute('href', url);
-        link.setAttribute('download', `security_report_${startDate}_to_${endDate || startDate}.csv`);
+        link.setAttribute('download', `CyberSecure_Report_${reportId}_${startDate.replace(/-/g, '')}_${(endDate || startDate).replace(/-/g, '')}.csv`);
         link.style.visibility = 'hidden';
         document.body.appendChild(link);
         link.click();
