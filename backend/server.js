@@ -81,6 +81,55 @@ app.use((req, res, next) => {
   next();
 });
 
+// Proxy endpoint for n8n report generation webhook
+app.post('/api/generate-report', async (req, res) => {
+  try {
+    const { mode, start_date, end_date } = req.body;
+    
+    // n8n webhook URL - Use the PRODUCTION URL from n8n (make sure workflow is ACTIVE)
+    // Check your n8n workflow's webhook node > Production URL tab
+    const webhookUrl = 'https://webhook.csnet.my/webhook/2cfbdbec-36fa-4ed1-b93b-be50375ad661';
+    
+    console.log('Calling n8n webhook with payload:', { mode, start_date, end_date });
+    
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ mode, start_date, end_date })
+    });
+
+    const responseText = await response.text();
+    console.log('Webhook response status:', response.status);
+    console.log('Webhook response body:', responseText);
+
+    if (!response.ok) {
+      console.error('Webhook error response:', responseText);
+      throw new Error(`Webhook returned ${response.status}: ${responseText}`);
+    }
+
+    // Try to parse as JSON
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (e) {
+      console.error('Failed to parse response as JSON:', responseText);
+      throw new Error('Invalid JSON response from n8n workflow. Check n8n execution logs for errors.');
+    }
+
+    console.log('Webhook response:', data);
+    res.json(data);
+  } catch (error) {
+    console.error('Error calling n8n webhook:', error);
+    res.status(500).json({ 
+      error: 'Failed to generate report', 
+      message: error.message,
+      hint: 'Check n8n workflow execution logs for detailed errors'
+    });
+  }
+});
+
 // n8n webhook POSTs here
 app.post('/webhook/alerts', (req, res) => {
   const alert = req.body;
