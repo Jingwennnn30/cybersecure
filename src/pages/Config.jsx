@@ -120,36 +120,148 @@ function Config({ darkMode, setDarkMode }) {
     const handleSaveTelegram = async () => {
         setSaving(true);
         setSaveMsg('');
+        
+        console.log('🔍 Validating Telegram Settings:', { 
+            telegramBotToken: `"${telegramBotToken}"`, 
+            telegramChannelId: `"${telegramChannelId}"` 
+        });
+        
+        // Validation: Check for null/empty inputs
+        if (!telegramBotToken || telegramBotToken.trim() === '') {
+            console.log('❌ Validation failed: Bot Token is empty');
+            setSaveMsg('❌ Error: Telegram Bot Token cannot be empty. Get it from @BotFather on Telegram');
+            setSaving(false);
+            return;
+        }
+        
+        // Validate bot token format (should be like: 123456789:ABCdefGHIjklMNOpqrsTUVwxyz)
+        const botTokenRegex = /^\d+:.+$/;
+        if (!botTokenRegex.test(telegramBotToken)) {
+            console.log('❌ Validation failed: Invalid bot token format');
+            setSaveMsg('❌ Error: Invalid Telegram Bot Token format. Should be like: 123456789:ABCdefGHIjklMNOpqrsTUVwxyz');
+            setSaving(false);
+            return;
+        }
+        
+        if (!telegramChannelId || telegramChannelId.trim() === '') {
+            console.log('❌ Validation failed: Channel ID is empty');
+            setSaveMsg('❌ Error: Telegram Channel ID cannot be empty. Should be numeric (e.g., -1001234567890)');
+            setSaving(false);
+            return;
+        }
+        
+        // Validate channel ID format (should be numeric, can be negative)
+        const channelIdRegex = /^-?\d+$/;
+        if (!channelIdRegex.test(telegramChannelId.trim())) {
+            console.log('❌ Validation failed: Invalid channel ID format');
+            setSaveMsg('❌ Error: Telegram Channel ID must be numeric (e.g., -1001234567890 or 123456789)');
+            setSaving(false);
+            return;
+        }
+        
+        console.log('✅ Telegram validation passed, saving...');
+        
         try {
             await setDoc(doc(db, "config", "system"), {
-                telegramBotToken,
-                telegramChannelId
+                telegramBotToken: telegramBotToken.trim(),
+                telegramChannelId: telegramChannelId.trim()
             }, { merge: true });
-            setSaveMsg('Saved successfully!');
+            console.log('✅ Telegram settings saved to Firestore');
+            setSaveMsg('✅ Telegram settings saved successfully!');
             setEditTelegram(false);
             setOriginalTelegram({ telegramBotToken, telegramChannelId });
         } catch (err) {
-            setSaveMsg('Error saving: ' + err.message);
+            console.error('❌ Error saving Telegram settings:', err);
+            setSaveMsg('❌ Error saving: ' + err.message);
         }
         setSaving(false);
     };
 
     // Save Email settings handler
     const handleSaveEmail = async () => {
+        alert('🔔 handleSaveEmail called! Check console for validation details.');
+        
         setSavingEmail(true);
         setSaveEmailMsg('');
+        
+        console.log('🔍 Validating Email Settings:', { 
+            smtpServer: `"${smtpServer}"`, 
+            smtpPort: `"${smtpPort}"`, 
+            emailFrom: `"${emailFrom}"`, 
+            emailPassword: `"${emailPassword}"` 
+        });
+        
+        // Validation: Check for null/empty inputs
+        if (!smtpServer || smtpServer.trim() === '') {
+            console.log('❌ Validation failed: SMTP Server is empty');
+            setSaveEmailMsg('❌ Error: SMTP Server cannot be empty. Please enter a valid server (e.g., smtp.gmail.com)');
+            setSavingEmail(false);
+            return;
+        }
+        
+        if (!smtpPort || smtpPort.toString().trim() === '') {
+            console.log('❌ Validation failed: SMTP Port is empty');
+            setSaveEmailMsg('❌ Error: SMTP Port cannot be empty. Please enter a valid port number (e.g., 465 or 587)');
+            setSavingEmail(false);
+            return;
+        }
+        
+        // Validate port is a number and within valid range
+        const portNumber = parseInt(smtpPort);
+        if (isNaN(portNumber) || portNumber < 1 || portNumber > 65535) {
+            console.log('❌ Validation failed: Invalid port number');
+            setSaveEmailMsg('❌ Error: SMTP Port must be a valid number between 1 and 65535');
+            setSavingEmail(false);
+            return;
+        }
+        
+        if (!emailFrom || emailFrom.trim() === '') {
+            console.log('❌ Validation failed: Email From is empty');
+            setSaveEmailMsg('❌ Error: Email From address cannot be empty. Please enter a valid email address');
+            setSavingEmail(false);
+            return;
+        }
+        
+        // Validate email format
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(emailFrom)) {
+            console.log('❌ Validation failed: Invalid email format');
+            setSaveEmailMsg('❌ Error: Please enter a valid email address format (e.g., user@example.com)');
+            setSavingEmail(false);
+            return;
+        }
+        
+        if (!emailPassword || emailPassword.trim() === '') {
+            console.log('❌ Validation failed: Email Password is empty');
+            setSaveEmailMsg('❌ Error: Email Password cannot be empty. Please enter your email password or app password');
+            setSavingEmail(false);
+            return;
+        }
+        
+        // Validate minimum password length
+        if (emailPassword.length < 8) {
+            console.log('❌ Validation failed: Password too short');
+            setSaveEmailMsg('❌ Error: Email Password must be at least 8 characters long');
+            setSavingEmail(false);
+            return;
+        }
+        
+        console.log('✅ All validations passed, saving to Firestore...');
+        
         try {
             await setDoc(doc(db, "config", "system"), {
-                smtpServer,
-                smtpPort,
-                emailFrom,
+                smtpServer: smtpServer.trim(),
+                smtpPort: smtpPort.toString().trim(),
+                emailFrom: emailFrom.trim(),
                 emailPassword
             }, { merge: true });
-            setSaveEmailMsg('Email settings saved!');
+            console.log('✅ Successfully saved to Firestore');
+            setSaveEmailMsg('✅ Email settings saved successfully!');
             setEditEmail(false);
             setOriginalEmail({ smtpServer, smtpPort, emailFrom, emailPassword });
         } catch (err) {
-            setSaveEmailMsg('Error saving: ' + err.message);
+            console.error('❌ Error saving to Firestore:', err);
+            setSaveEmailMsg('❌ Error saving: ' + err.message);
         }
         setSavingEmail(false);
     };
@@ -169,22 +281,77 @@ function Config({ darkMode, setDarkMode }) {
         setEditEmail(false);
         setSaveEmailMsg('');
     };
+    
+    const handleEditEmail = () => {
+        setEditEmail(true);
+        setSaveEmailMsg(''); // Clear any previous messages when entering edit mode
+    };
 
     // Save AI settings handler
     const handleSaveAI = async () => {
         setSavingAI(true);
         setSaveAIMsg('');
+        
+        console.log('🔍 Validating AI Configuration:', { 
+            aiModel: `"${aiModel}"`, 
+            aiEndpoint: `"${aiEndpoint}"` 
+        });
+        
+        // Validation: Check for null/empty inputs
+        if (!aiModel || aiModel.trim() === '') {
+            console.log('❌ Validation failed: AI Model is empty');
+            setSaveAIMsg('❌ Error: AI Model cannot be empty. Please select a model');
+            setSavingAI(false);
+            return;
+        }
+        
+        if (!aiEndpoint || aiEndpoint.trim() === '') {
+            console.log('❌ Validation failed: AI Endpoint is empty');
+            setSaveAIMsg('❌ Error: AI Endpoint URL cannot be empty. Please enter a valid API endpoint');
+            setSavingAI(false);
+            return;
+        }
+        
+        // Validate URL format
+        let urlObj;
+        try {
+            urlObj = new URL(aiEndpoint);
+        } catch (e) {
+            console.log('❌ Validation failed: Invalid URL format');
+            setSaveAIMsg('❌ Error: Invalid URL format. Please enter a valid URL (e.g., https://api.openai.com/v1/chat/completions)');
+            setSavingAI(false);
+            return;
+        }
+        
+        // Validate HTTPS protocol for security
+        if (urlObj.protocol !== 'https:') {
+            console.log('❌ Validation failed: URL must use HTTPS');
+            setSaveAIMsg('❌ Error: AI Endpoint must use HTTPS protocol for security. Change http:// to https://');
+            setSavingAI(false);
+            return;
+        }
+        
+        // Validate that URL has a proper domain
+        if (!urlObj.hostname || urlObj.hostname === 'localhost' || urlObj.hostname === '127.0.0.1') {
+            console.log('⚠️ Warning: Using localhost endpoint');
+            setSaveAIMsg('⚠️ Warning: Using localhost endpoint. Make sure this is intentional for testing.');
+        }
+        
+        console.log('✅ AI configuration validation passed, saving...');
+        
         try {
             await setDoc(doc(db, "config", "system"), {
-                aiModel,
-                aiEndpoint
+                aiModel: aiModel.trim(),
+                aiEndpoint: aiEndpoint.trim()
                 // Note: API key is NOT saved to Firestore, it stays in backend/.env
             }, { merge: true });
-            setSaveAIMsg('AI configuration saved! (API key managed in backend)');
+            console.log('✅ AI configuration saved to Firestore');
+            setSaveAIMsg('✅ AI configuration saved successfully! (API key managed in backend)');
             setEditAI(false);
             setOriginalAI({ aiModel, aiEndpoint, aiApiKey });
         } catch (err) {
-            setSaveAIMsg('Error saving: ' + err.message);
+            console.error('❌ Error saving AI configuration:', err);
+            setSaveAIMsg('❌ Error saving: ' + err.message);
         }
         setSavingAI(false);
     };
@@ -248,13 +415,14 @@ function Config({ darkMode, setDarkMode }) {
                         </div>
                         <div className="mt-4 space-y-4">
                             <div>
-                                <Text className="text-gray-700 dark:text-gray-200">Telegram Bot Token</Text>
+                                <Text className="text-gray-700 dark:text-gray-200">Telegram Bot Token <span className="text-red-500">*</span></Text>
                                 {editTelegram ? (
                                     <TextInput
-                                        placeholder="Enter your Telegram bot token"
+                                        placeholder="e.g., 123456789:ABCdefGHIjklMNOpqrsTUVwxyz (required)"
                                         className="mt-2"
                                         value={telegramBotToken}
                                         onChange={e => setTelegramBotToken(e.target.value)}
+                                        required
                                     />
                                 ) : (
                                     <div className="mt-2 px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-gray-800 dark:text-gray-200 break-all">
@@ -263,13 +431,14 @@ function Config({ darkMode, setDarkMode }) {
                                 )}
                             </div>
                             <div>
-                                <Text className="text-gray-700 dark:text-gray-200">Telegram Channel ID</Text>
+                                <Text className="text-gray-700 dark:text-gray-200">Telegram Channel ID <span className="text-red-500">*</span></Text>
                                 {editTelegram ? (
                                     <TextInput
-                                        placeholder="Enter your Telegram channel ID"
+                                        placeholder="e.g., -1001234567890 or 123456789 (required)"
                                         className="mt-2"
                                         value={telegramChannelId}
                                         onChange={e => setTelegramChannelId(e.target.value)}
+                                        required
                                     />
                                 ) : (
                                     <div className="mt-2 px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-gray-800 dark:text-gray-200 break-all">
@@ -298,8 +467,29 @@ function Config({ darkMode, setDarkMode }) {
                                 </div>
                             )}
                             {saveMsg && (
-                                <div className="mt-2 text-sm" style={{ color: saveMsg.startsWith('Error') ? 'red' : 'green' }}>
-                                    {saveMsg}
+                                <div className={`mt-3 p-3 rounded-lg border ${
+                                    saveMsg.includes('❌') 
+                                        ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300' 
+                                        : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300'
+                                }`}>
+                                    <div className="flex items-start">
+                                        <div className="flex-shrink-0">
+                                            {saveMsg.includes('❌') ? (
+                                                <svg className="w-5 h-5 text-red-600 dark:text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                                                </svg>
+                                            ) : (
+                                                <svg className="w-5 h-5 text-green-600 dark:text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                                </svg>
+                                            )}
+                                        </div>
+                                        <div className="ml-3 flex-1">
+                                            <p className="text-sm font-medium">
+                                                {saveMsg}
+                                            </p>
+                                        </div>
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -310,18 +500,19 @@ function Config({ darkMode, setDarkMode }) {
                         <div className="flex items-center justify-between">
                             <Title className="text-gray-900 dark:text-gray-100">Email Notifications</Title>
                             {!editEmail && (
-                                <span onClick={() => setEditEmail(true)}>{EditIcon}</span>
+                                <span onClick={handleEditEmail}>{EditIcon}</span>
                             )}
                         </div>
                         <div className="mt-4 space-y-4">
                             <div>
-                                <Text className="text-gray-700 dark:text-gray-200">SMTP Server</Text>
+                                <Text className="text-gray-700 dark:text-gray-200">SMTP Server <span className="text-red-500">*</span></Text>
                                 {editEmail ? (
                                     <TextInput
-                                        placeholder="smtp.example.com"
+                                        placeholder="e.g., smtp.gmail.com (required)"
                                         className="mt-2"
                                         value={smtpServer}
                                         onChange={e => setSmtpServer(e.target.value)}
+                                        required
                                     />
                                 ) : (
                                     <div className="mt-2 px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-gray-800 dark:text-gray-200 break-all">
@@ -330,14 +521,15 @@ function Config({ darkMode, setDarkMode }) {
                                 )}
                             </div>
                             <div>
-                                <Text className="text-gray-700 dark:text-gray-200">SMTP Port</Text>
+                                <Text className="text-gray-700 dark:text-gray-200">SMTP Port <span className="text-red-500">*</span></Text>
                                 {editEmail ? (
                                     <TextInput
-                                        placeholder="587"
+                                        placeholder="587 or 465 (required)"
                                         type="number"
                                         className="mt-2"
                                         value={smtpPort}
                                         onChange={e => setSmtpPort(e.target.value)}
+                                        required
                                     />
                                 ) : (
                                     <div className="mt-2 px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-gray-800 dark:text-gray-200 break-all">
@@ -346,14 +538,15 @@ function Config({ darkMode, setDarkMode }) {
                                 )}
                             </div>
                             <div>
-                                <Text className="text-gray-700 dark:text-gray-200">Email From</Text>
+                                <Text className="text-gray-700 dark:text-gray-200">Email From <span className="text-red-500">*</span></Text>
                                 {editEmail ? (
                                     <TextInput
-                                        placeholder="security@yourdomain.com"
+                                        placeholder="your-email@gmail.com (required)"
                                         type="email"
                                         className="mt-2"
                                         value={emailFrom}
                                         onChange={e => setEmailFrom(e.target.value)}
+                                        required
                                     />
                                 ) : (
                                     <div className="mt-2 px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-gray-800 dark:text-gray-200 break-all">
@@ -362,14 +555,15 @@ function Config({ darkMode, setDarkMode }) {
                                 )}
                             </div>
                             <div>
-                                <Text className="text-gray-700 dark:text-gray-200">Email Password</Text>
+                                <Text className="text-gray-700 dark:text-gray-200">Email Password <span className="text-red-500">*</span></Text>
                                 {editEmail ? (
                                     <TextInput
-                                        placeholder="Your email password or app password"
+                                        placeholder="Min 8 characters (required)"
                                         type="password"
                                         className="mt-2"
                                         value={emailPassword}
                                         onChange={e => setEmailPassword(e.target.value)}
+                                        required
                                     />
                                 ) : (
                                     <div className="mt-2 px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-gray-800 dark:text-gray-200 break-all">
@@ -384,6 +578,7 @@ function Config({ darkMode, setDarkMode }) {
                                         color="indigo"
                                         onClick={handleSaveEmail}
                                         loading={savingEmail}
+                                        disabled={savingEmail}
                                     >
                                         Save Email Settings
                                     </Button>
@@ -397,9 +592,37 @@ function Config({ darkMode, setDarkMode }) {
                                     </Button>
                                 </div>
                             )}
+                            {editEmail && (
+                                <div className="mt-3 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                                    <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                                        <strong>⚠️ Required Fields:</strong> All fields marked with <span className="text-red-500">*</span> must be filled before saving.
+                                    </p>
+                                </div>
+                            )}
                             {saveEmailMsg && (
-                                <div className="mt-2 text-sm" style={{ color: saveEmailMsg.startsWith('Error') ? 'red' : 'green' }}>
-                                    {saveEmailMsg}
+                                <div className={`mt-3 p-3 rounded-lg border ${
+                                    saveEmailMsg.includes('❌') 
+                                        ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300' 
+                                        : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300'
+                                }`}>
+                                    <div className="flex items-start">
+                                        <div className="flex-shrink-0">
+                                            {saveEmailMsg.includes('❌') ? (
+                                                <svg className="w-5 h-5 text-red-600 dark:text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                                                </svg>
+                                            ) : (
+                                                <svg className="w-5 h-5 text-green-600 dark:text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                                </svg>
+                                            )}
+                                        </div>
+                                        <div className="ml-3 flex-1">
+                                            <p className="text-sm font-medium">
+                                                {saveEmailMsg}
+                                            </p>
+                                        </div>
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -415,12 +638,13 @@ function Config({ darkMode, setDarkMode }) {
                         </div>
                         <div className="mt-4 space-y-4">
                             <div>
-                                <Text className="text-gray-700 dark:text-gray-200">Model Selection</Text>
+                                <Text className="text-gray-700 dark:text-gray-200">Model Selection <span className="text-red-500">*</span></Text>
                                 {editAI ? (
                                     <Select 
                                         className="mt-2" 
                                         value={aiModel}
                                         onValueChange={setAiModel}
+                                        required
                                     >
                                         <SelectItem value="openai">OpenAI GPT</SelectItem>
                                         <SelectItem value="granite">IBM Granite</SelectItem>
@@ -433,13 +657,14 @@ function Config({ darkMode, setDarkMode }) {
                                 )}
                             </div>
                             <div>
-                                <Text className="text-gray-700 dark:text-gray-200">API Endpoint</Text>
+                                <Text className="text-gray-700 dark:text-gray-200">API Endpoint <span className="text-red-500">*</span></Text>
                                 {editAI ? (
                                     <TextInput
-                                        placeholder="https://api.openai.com/v1/chat/completions"
+                                        placeholder="https://api.openai.com/v1/chat/completions (required, must be HTTPS)"
                                         className="mt-2"
                                         value={aiEndpoint}
                                         onChange={e => setAiEndpoint(e.target.value)}
+                                        required
                                     />
                                 ) : (
                                     <div className="mt-2 px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-gray-800 dark:text-gray-200 break-all">
@@ -478,8 +703,35 @@ function Config({ darkMode, setDarkMode }) {
                                 </div>
                             )}
                             {saveAIMsg && (
-                                <div className="mt-2 text-sm" style={{ color: saveAIMsg.startsWith('Error') ? 'red' : 'green' }}>
-                                    {saveAIMsg}
+                                <div className={`mt-3 p-3 rounded-lg border ${
+                                    saveAIMsg.includes('❌') 
+                                        ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300' 
+                                        : saveAIMsg.includes('⚠️')
+                                        ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-300'
+                                        : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300'
+                                }`}>
+                                    <div className="flex items-start">
+                                        <div className="flex-shrink-0">
+                                            {saveAIMsg.includes('❌') ? (
+                                                <svg className="w-5 h-5 text-red-600 dark:text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                                                </svg>
+                                            ) : saveAIMsg.includes('⚠️') ? (
+                                                <svg className="w-5 h-5 text-yellow-600 dark:text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                                </svg>
+                                            ) : (
+                                                <svg className="w-5 h-5 text-green-600 dark:text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                                </svg>
+                                            )}
+                                        </div>
+                                        <div className="ml-3 flex-1">
+                                            <p className="text-sm font-medium">
+                                                {saveAIMsg}
+                                            </p>
+                                        </div>
+                                    </div>
                                 </div>
                             )}
                         </div>

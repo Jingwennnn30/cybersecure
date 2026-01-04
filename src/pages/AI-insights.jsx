@@ -1,22 +1,74 @@
-import React from 'react';
-import { Card, Title, Text, BarChart, DonutChart, Grid } from '@tremor/react';
+import React, { useState, useEffect } from 'react';
+import { Card, Title, Text, Grid } from '@tremor/react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import Navigation from '../components/Navigation';
 
-const insightData = [
-  { category: 'Network', threats: 45, mitigated: 42 },
-  { category: 'Application', threats: 32, mitigated: 28 },
-  { category: 'User', threats: 28, mitigated: 25 },
-  { category: 'System', threats: 15, mitigated: 13 },
-];
-
-const threatTypes = [
-  { name: 'Malware', value: 35 },
-  { name: 'Phishing', value: 25 },
-  { name: 'DDoS', value: 20 },
-  { name: 'Data Breach', value: 20 },
-];
-
 function AIInsights({ darkMode, setDarkMode }) {
+  const [insightData, setInsightData] = useState([]);
+  const [threatTypes, setThreatTypes] = useState([]);
+  const [recommendations, setRecommendations] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchAIInsights();
+  }, []);
+
+  const fetchAIInsights = async () => {
+    try {
+      const response = await fetch('/api/ai-insights');
+      const data = await response.json();
+
+      // Process category data for bar chart
+      if (data.categoryData && data.categoryData.length > 0) {
+        setInsightData(data.categoryData.map(item => ({
+          category: item.category,
+          threats: parseInt(item.threats) || 0,
+          mitigated: parseInt(item.mitigated) || 0
+        })));
+      }
+
+      // Process threat type data for donut chart
+      if (data.threatTypeData && data.threatTypeData.length > 0) {
+        const total = data.threatTypeData.reduce((sum, item) => sum + parseInt(item.count), 0);
+        setThreatTypes(data.threatTypeData
+          .filter(item => item.threat_type !== 'Other' || parseInt(item.count) > 0)
+          .map(item => ({
+            name: item.threat_type,
+            value: total > 0 ? Math.round((parseInt(item.count) / total) * 100) : 0
+          }))
+        );
+      }
+
+      // Process recommendations from analyses
+      if (data.analyses && data.analyses.length > 0) {
+        const highPriorityRecs = data.analyses
+          .filter(a => a.ai_priority === 'high')
+          .slice(0, 3)
+          .map(a => ({
+            priority: 'High Priority',
+            text: a.ai_suggestion || a.ai_explanation,
+            summary: a.ai_summary,
+            checks: a.ai_recommended_checks || []
+          }));
+
+        const systemHealthRecs = data.analyses
+          .filter(a => a.ai_priority === 'low' || a.ai_priority === 'medium')
+          .slice(0, 2)
+          .map(a => ({
+            priority: 'System Health',
+            text: a.ai_explanation || a.ai_suggestion,
+            summary: a.ai_summary
+          }));
+
+        setRecommendations([...highPriorityRecs, ...systemHealthRecs]);
+      }
+
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching AI insights:', error);
+      setLoading(false);
+    }
+  };
   // Sidebar and main content styling
   const sidebarClass = "w-72 bg-white dark:bg-gray-900 p-6 shadow-xl border-r border-gray-200 dark:border-gray-800 fixed h-screen flex flex-col";
   const mainClass = "flex-1 pl-80 p-8 overflow-auto bg-background-light dark:bg-gray-900 transition-colors min-h-screen";
@@ -89,64 +141,158 @@ function AIInsights({ darkMode, setDarkMode }) {
             <p className="text-gray-600 dark:text-gray-300 text-lg">AI-powered security analysis and predictions</p>
           </div>
 
-          <Grid numItems={1} numItemsSm={2} className="gap-6 mb-6">
-            {/* Threat Detection Chart */}
-            <Card className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
-              <Title className="text-gray-900 dark:text-gray-100">Threat Detection by Category</Title>
-              <Text className="text-gray-600 dark:text-gray-300 mt-2">Analysis of detected vs mitigated threats</Text>
-              <div className="mt-6">
-                <BarChart
-                  className="h-72"
-                  data={insightData}
-                  index="category"
-                  categories={["threats", "mitigated"]}
-                  colors={["amber", "emerald"]}
-                  valueFormatter={(number) => number.toString()}
-                  showLegend={true}
-                  showGridLines={false}
-                  showYAxis={true}
-                  yAxisWidth={48}
-                />
-              </div>
-            </Card>
+          {loading ? (
+            <div className="flex justify-center items-center h-64">
+              <Text className="text-gray-500 dark:text-gray-400">Loading AI insights...</Text>
+            </div>
+          ) : (
+            <>
+              <Grid numItems={1} numItemsSm={2} className="gap-6 mb-6">
+                {/* Threat Detection Chart */}
+                <Card className="bg-gradient-to-br from-white to-blue-50 dark:from-gray-800 dark:to-gray-900 border border-blue-200 dark:border-gray-600 shadow-lg">
+                  <Title className="text-gray-900 dark:text-white font-bold">Threat Detection by Category</Title>
+                  <Text className="text-gray-600 dark:text-gray-400 mt-2">Analysis of detected vs mitigated threats</Text>
+                  <div className="mt-6">
+                    {insightData.length > 0 ? (
+                      <ResponsiveContainer width="100%" height={300}>
+                        <BarChart data={insightData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? "#374151" : "#e5e7eb"} />
+                          <XAxis dataKey="category" stroke={darkMode ? "#9ca3af" : "#6b7280"} />
+                          <YAxis stroke={darkMode ? "#9ca3af" : "#6b7280"} />
+                          <Tooltip 
+                            contentStyle={{ 
+                              backgroundColor: darkMode ? '#1f2937' : '#fff', 
+                              border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, 
+                              borderRadius: '8px',
+                              color: darkMode ? '#e5e7eb' : '#1f2937'
+                            }}
+                          />
+                          <Legend wrapperStyle={{ color: darkMode ? '#e5e7eb' : '#1f2937' }} />
+                          <Bar dataKey="threats" fill="#d97706" radius={[8, 8, 0, 0]} />
+                          <Bar dataKey="mitigated" fill="#10b981" radius={[8, 8, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-72 flex items-center justify-center">
+                        <Text className="text-gray-500">No threat data available</Text>
+                      </div>
+                    )}
+                  </div>
+                </Card>
 
-            {/* Threat Distribution */}
-            <Card className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
-              <Title className="text-gray-900 dark:text-gray-100">Threat Type Distribution</Title>
-              <Text className="text-gray-600 dark:text-gray-300 mt-2">Breakdown of identified threats</Text>
-              <div className="mt-6">
-                <DonutChart
-                  className="h-72"
-                  data={threatTypes}
-                  category="value"
-                  index="name"
-                  colors={["red", "amber", "blue", "emerald"]}
-                  showAnimation={true}
-                  showTooltip={true}
-                  valueFormatter={(number) => `${number}%`}
-                />
-              </div>
-            </Card>
-          </Grid>
+                {/* Threat Distribution */}
+                <Card className="bg-gradient-to-br from-white to-purple-50 dark:from-gray-800 dark:to-gray-900 border border-purple-200 dark:border-gray-600 shadow-lg">
+                  <Title className="text-gray-900 dark:text-white font-bold">Threat Type Distribution</Title>
+                  <Text className="text-gray-600 dark:text-gray-400 mt-2">Breakdown of identified threats</Text>
+                  <div className="mt-6 flex justify-center">
+                    {threatTypes.length > 0 ? (
+                      <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                          <Pie
+                            data={threatTypes}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={60}
+                            outerRadius={100}
+                            paddingAngle={5}
+                            dataKey="value"
+                            label={({ name, value }) => `${name}: ${value}%`}
+                            labelLine={{ stroke: darkMode ? '#9ca3af' : '#6b7280' }}
+                          >
+                            {threatTypes.map((entry, index) => {
+                              const colors = ['#3b82f6', '#8b5cf6', '#ec4899', '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6'];
+                              return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />;
+                            })}
+                          </Pie>
+                          <Tooltip 
+                            contentStyle={{ 
+                              backgroundColor: darkMode ? '#1f2937' : '#fff', 
+                              border: `1px solid ${darkMode ? '#374151' : '#e5e7eb'}`, 
+                              borderRadius: '8px',
+                              color: darkMode ? '#e5e7eb' : '#1f2937'
+                            }}
+                            formatter={(value) => `${value}%`}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-72 flex items-center justify-center">
+                        <Text className="text-gray-500">No threat type data available</Text>
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              </Grid>
+            </>
+          )}
 
           {/* AI Recommendations */}
-          <Card className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
-            <Title className="text-gray-900 dark:text-gray-100">AI Recommendations</Title>
+          <Card className="bg-gradient-to-br from-white to-green-50 dark:from-gray-800 dark:to-gray-900 border border-green-200 dark:border-gray-600 shadow-lg">
+            <Title className="text-gray-900 dark:text-white font-bold">AI Recommendations</Title>
             <div className="mt-4 space-y-4">
-              <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
-                <Text className="font-medium text-amber-600">High Priority</Text>
-                <Text className="text-gray-700 dark:text-gray-200 mt-2">
-                  Multiple failed login attempts detected from IP range 192.168.1.x.
-                  Recommend implementing additional authentication measures.
-                </Text>
-              </div>
-              <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
-                <Text className="font-medium text-emerald-600">System Health</Text>
-                <Text className="text-gray-700 dark:text-gray-200 mt-2">
-                  Firewall rules are properly configured. Continue monitoring for any anomalies
-                  in network traffic patterns.
-                </Text>
-              </div>
+              {loading ? (
+                <div className="flex items-center justify-center p-8">
+                  <div className="animate-pulse flex space-x-4">
+                    <div className="h-12 w-12 bg-blue-300 dark:bg-blue-600 rounded-full"></div>
+                    <div className="flex-1 space-y-4 py-1">
+                      <div className="h-4 bg-blue-300 dark:bg-blue-600 rounded w-3/4"></div>
+                      <div className="h-4 bg-blue-200 dark:bg-blue-700 rounded w-5/6"></div>
+                    </div>
+                  </div>
+                </div>
+              ) : recommendations.length > 0 ? (
+                recommendations.map((rec, index) => (
+                  <div key={index} className={`p-5 rounded-xl border-l-4 shadow-md transition-all hover:shadow-xl ${
+                    rec.priority === 'High Priority' 
+                      ? 'bg-gradient-to-r from-red-50 to-orange-50 dark:from-gray-700 dark:to-gray-800 border-red-500' 
+                      : 'bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-gray-700 dark:to-gray-800 border-emerald-500'
+                  }`}>
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                        rec.priority === 'High Priority' 
+                          ? 'bg-red-500 text-white' 
+                          : 'bg-emerald-500 text-white'
+                      }`}>
+                        {rec.priority}
+                      </span>
+                    </div>
+                    {rec.summary && (
+                      <Text className="text-gray-900 dark:text-white font-bold text-lg mt-2 mb-2">
+                        {rec.summary}
+                      </Text>
+                    )}
+                    <Text className="text-gray-700 dark:text-gray-200 mt-3 leading-relaxed mb-4">
+                      {rec.text}
+                    </Text>
+                    {rec.checks && rec.checks.length > 0 && (
+                      <div className="mt-4 p-4 bg-blue-50 dark:bg-gray-600 rounded-lg border border-blue-200 dark:border-blue-500">
+                        <Text className="text-sm font-bold text-blue-700 dark:text-blue-300 mb-3 flex items-center gap-2">
+                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                          </svg>
+                          Recommended Actions:
+                        </Text>
+                        <ul className="space-y-2">
+                          {rec.checks.map((check, idx) => (
+                            <li key={idx} className="text-sm text-gray-700 dark:text-gray-100 flex items-start gap-2">
+                              <span className="text-blue-600 dark:text-blue-300 mt-0.5 font-bold">•</span>
+                              <span>{check}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <div className="p-6 bg-gradient-to-r from-gray-50 to-gray-100 dark:bg-gray-900 rounded-lg border border-gray-300 dark:border-gray-700 text-center">
+                  <svg className="w-16 h-16 mx-auto text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <Text className="text-gray-500 dark:text-gray-400 font-medium">No recommendations available at this time.</Text>
+                  <Text className="text-gray-400 dark:text-gray-500 text-sm mt-1">Check back later for AI-powered security insights.</Text>
+                </div>
+              )}
             </div>
           </Card>
         </main>

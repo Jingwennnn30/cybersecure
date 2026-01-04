@@ -7,7 +7,19 @@ module.exports = {
     ],
     safelist: [
         {
-            pattern: /fill-(red|amber|yellow|green|blue|emerald|indigo|purple|pink|gray)-(100|200|300|400|500|600|700|800|900)/,
+            pattern: /fill-(red|amber|yellow|green|blue|emerald|indigo|purple|pink|gray|rose|cyan|violet|fuchsia|lime|orange|teal)-(100|200|300|400|500|600|700|800|900)/,
+            variants: ['dark'],
+        },
+        {
+            pattern: /bg-(red|amber|yellow|green|blue|emerald|indigo|purple|pink|gray|rose|cyan|violet|fuchsia|lime|orange|teal)-(50|100|200|300|400|500|600|700|800|900)/,
+            variants: ['dark', 'hover'],
+        },
+        {
+            pattern: /text-(red|amber|yellow|green|blue|emerald|indigo|purple|pink|gray|rose|cyan|violet|fuchsia|lime|orange|teal)-(50|100|200|300|400|500|600|700|800|900)/,
+            variants: ['dark'],
+        },
+        {
+            pattern: /stroke-(red|amber|yellow|green|blue|emerald|indigo|purple|pink|gray|rose|cyan|violet|fuchsia|lime|orange|teal)-(100|200|300|400|500|600|700|800|900)/,
             variants: ['dark'],
         },
     ],

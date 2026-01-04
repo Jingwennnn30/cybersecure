@@ -1,5 +1,5 @@
 // Load environment variables
-require('dotenv').config();
+require('dotenv').config({ path: __dirname + '/.env' });
 
 const express = require('express');
 const { createClient } = require('@clickhouse/client');
@@ -18,7 +18,7 @@ const wss = new WebSocket.Server({ server });
 
 // ClickHouse client configuration
 const client = createClient({
-  host: process.env.CLICKHOUSE_HOST || 'http://localhost:8123',
+  url: process.env.CLICKHOUSE_HOST || 'http://localhost:8123',
   username: process.env.CLICKHOUSE_USER || 'default',
   password: process.env.CLICKHOUSE_PASSWORD || '',
   database: process.env.CLICKHOUSE_DB || 'default'
@@ -54,14 +54,23 @@ app.use(express.urlencoded({ extended: true }));
 // Make ClickHouse client available to routes
 app.locals.clickhouseClient = client;
 
-// Initialize Chatbot Service with MCP
-const ChatbotService = require('./services/chatbotService');
-const chatbotService = new ChatbotService(client);
-console.log('✓ Chatbot Service initialized with MCP protocol');
-
-// Import and use chatbot routes
-const chatbotRouter = require('./routes/chatbot')(chatbotService);
-app.use('/api', chatbotRouter);
+// Initialize Chatbot Service with MCP (only if OpenAI key is available)
+if (process.env.OPENAI_API_KEY) {
+  try {
+    const ChatbotService = require('./services/chatbotService');
+    const chatbotService = new ChatbotService(client);
+    console.log('✓ Chatbot Service initialized with MCP protocol');
+    
+    // Import and use chatbot routes
+    const chatbotRouter = require('./routes/chatbot')(chatbotService);
+    app.use('/api', chatbotRouter);
+  } catch (err) {
+    console.warn('⚠ Chatbot Service initialization failed:', err.message);
+    console.warn('  Chatbot features will be disabled');
+  }
+} else {
+  console.warn('⚠ OPENAI_API_KEY not configured. Chatbot features will be disabled.');
+}
 
 // Simple request logger to help debug routing issues (method + path)
 app.use((req, res, next) => {
@@ -314,6 +323,142 @@ app.get('/api/alerts', async (req, res) => {
     // Return empty array instead of error object to prevent frontend crashes
     console.warn('Returning empty array due to database connection error');
     res.json([]);
+  }
+});
+
+// New endpoint: Get AI analysis insights (using only ai_analysis table)
+app.get('/api/ai-insights', async (req, res) => {
+  try {
+    console.log('Fetching AI insights from ClickHouse...');
+    
+    // Get all AI analyses
+    const analysesQuery = await client.query({
+      query: `
+        SELECT 
+          alert_id,
+          ai_summary,
+          ai_priority,
+          ai_likelihood,
+          ai_suggestion,
+          ai_explanation,
+          ai_recommended_checks
+        FROM ai_analysis
+        ORDER BY alert_id DESC
+        LIMIT 100
+      `,
+      format: 'JSONEachRow'
+    });
+    const analyses = await analysesQuery.json();
+
+    // Get priority distribution
+    const priorityQuery = await client.query({
+      query: `
+        SELECT 
+          ai_priority as priority,
+          count() as count
+        FROM ai_analysis
+        WHERE ai_priority != ''
+        GROUP BY ai_priority
+      `,
+      format: 'JSONEachRow'
+    });
+    const priorityDist = await priorityQuery.json();
+
+    // Get likelihood distribution
+    const likelihoodQuery = await client.query({
+      query: `
+        SELECT 
+          ai_likelihood as likelihood,
+          count() as count
+        FROM ai_analysis
+        WHERE ai_likelihood != ''
+        GROUP BY ai_likelihood
+      `,
+      format: 'JSONEachRow'
+    });
+    const likelihoodDist = await likelihoodQuery.json();
+
+    // Categorize threats by analyzing AI summaries
+    const categoryQuery = await client.query({
+      query: `
+        SELECT 
+          CASE
+            WHEN lower(ai_summary) LIKE '%network%' OR lower(ai_summary) LIKE '%ddos%' 
+                 OR lower(ai_summary) LIKE '%scan%' OR lower(ai_summary) LIKE '%traffic%' 
+                 OR lower(ai_summary) LIKE '%dns%' OR lower(ai_summary) LIKE '%port%' THEN 'Network'
+            WHEN lower(ai_summary) LIKE '%application%' OR lower(ai_summary) LIKE '%web%' 
+                 OR lower(ai_summary) LIKE '%sql%' OR lower(ai_summary) LIKE '%injection%' THEN 'Application'
+            WHEN lower(ai_summary) LIKE '%user%' OR lower(ai_summary) LIKE '%login%' 
+                 OR lower(ai_summary) LIKE '%auth%' OR lower(ai_summary) LIKE '%access%' 
+                 OR lower(ai_summary) LIKE '%credential%' THEN 'User'
+            WHEN lower(ai_summary) LIKE '%system%' OR lower(ai_summary) LIKE '%backdoor%' 
+                 OR lower(ai_summary) LIKE '%malware%' OR lower(ai_summary) LIKE '%execution%' 
+                 OR lower(ai_summary) LIKE '%command%' THEN 'System'
+            ELSE 'Other'
+          END as category,
+          count() as threats,
+          countIf(ai_priority = 'low') as mitigated
+        FROM ai_analysis
+        WHERE ai_summary != ''
+        GROUP BY category
+      `,
+      format: 'JSONEachRow'
+    });
+    const categoryData = await categoryQuery.json();
+
+    // Get threat type distribution based on summaries and patterns
+    const threatTypeQuery = await client.query({
+      query: `
+        SELECT 
+          CASE
+            WHEN lower(ai_summary) LIKE '%malware%' OR lower(ai_summary) LIKE '%virus%' THEN 'Malware'
+            WHEN lower(ai_summary) LIKE '%phishing%' OR lower(ai_summary) LIKE '%social%' THEN 'Phishing'
+            WHEN lower(ai_summary) LIKE '%ddos%' OR lower(ai_summary) LIKE '%denial%' THEN 'DDoS'
+            WHEN lower(ai_summary) LIKE '%breach%' OR lower(ai_summary) LIKE '%leak%' 
+                 OR lower(ai_summary) LIKE '%exfiltration%' THEN 'Data Breach'
+            WHEN lower(ai_summary) LIKE '%backdoor%' OR lower(ai_summary) LIKE '%trojan%' 
+                 OR lower(ai_summary) LIKE '%xz%' THEN 'Backdoor'
+            WHEN lower(ai_summary) LIKE '%injection%' OR lower(ai_summary) LIKE '%sql%' THEN 'Injection Attack'
+            WHEN lower(ai_summary) LIKE '%scan%' OR lower(ai_summary) LIKE '%probe%' 
+                 OR lower(ai_summary) LIKE '%reconnaissance%' THEN 'Network Scan'
+            WHEN lower(ai_summary) LIKE '%bot%' OR lower(ai_summary) LIKE '%c2%' 
+                 OR lower(ai_summary) LIKE '%command and control%' THEN 'Botnet'
+            ELSE 'Other'
+          END as threat_type,
+          count() as count
+        FROM ai_analysis
+        WHERE ai_summary != ''
+        GROUP BY threat_type
+        ORDER BY count DESC
+      `,
+      format: 'JSONEachRow'
+    });
+    const threatTypeData = await threatTypeQuery.json();
+
+    console.log('AI insights fetched:', {
+      totalAnalyses: analyses.length,
+      priorities: priorityDist.length,
+      likelihoods: likelihoodDist.length,
+      categories: categoryData.length,
+      threatTypes: threatTypeData.length
+    });
+
+    res.json({
+      analyses,
+      priorityDistribution: priorityDist,
+      likelihoodDistribution: likelihoodDist,
+      categoryData,
+      threatTypeData
+    });
+  } catch (err) {
+    console.error('Error in /api/ai-insights:', err);
+    res.json({
+      analyses: [],
+      priorityDistribution: [],
+      likelihoodDistribution: [],
+      categoryData: [],
+      threatTypeData: []
+    });
   }
 });
 

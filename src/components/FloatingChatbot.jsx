@@ -154,7 +154,7 @@ function FloatingChatbot() {
 
         try {
             const response = await fetch(
-                `${process.env.REACT_APP_API_URL || "http://localhost:4000"}/api/chatbot`,
+                '/api/chatbot',
                 {
                     method: "POST",
                     headers: {
