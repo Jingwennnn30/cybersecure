@@ -357,13 +357,33 @@ function Reports({ darkMode, setDarkMode }) {
                     <div class="section">
                         <div class="executive-summary">
                             <div class="summary-title">Executive Summary</div>
-                            <p>${report.summary || 'No security incidents were detected during the reporting period. All monitored systems and networks maintained normal operational status with no unusual activity or policy violations observed.'}</p>
+                            <p>${report.executive_summary || report.summary || 'No security incidents were detected during the reporting period. All monitored systems and networks maintained normal operational status with no unusual activity or policy violations observed.'}</p>
                         </div>
                     </div>
                     
+                    ${report.key_insights && report.key_insights.length > 0 ? `
+                        <!-- Key Insights -->
+                        <div class="section">
+                            <div class="section-title">I. Key Insights</div>
+                            <div class="recommendations">
+                                ${report.key_insights.map((insight, index) => `
+                                    <div class="recommendation-item">${insight}</div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+                    
+                    ${report.what_changed ? `
+                        <!-- Period Comparison -->
+                        <div class="section">
+                            <div class="section-title">II. Period Comparison</div>
+                            <p style="margin-bottom: 12px; font-size: 10pt; color: #2a2a2a; line-height: 1.7; text-align: justify;">${report.what_changed}</p>
+                        </div>
+                    ` : ''}
+                    
                     <!-- Security Metrics -->
                     <div class="section">
-                        <div class="section-title">I. Security Metrics Overview</div>
+                        <div class="section-title">${report.key_insights ? 'III' : 'I'}. Security Metrics Overview</div>
                         <table class="stats-table">
                             <thead>
                                 <tr>
@@ -373,29 +393,112 @@ function Reports({ darkMode, setDarkMode }) {
                                 </tr>
                             </thead>
                             <tbody>
+                                ${report.incident_overview?.total_incidents !== undefined ? `
+                                    <tr>
+                                        <td>Total Security Incidents</td>
+                                        <td class="value-cell">${report.incident_overview.total_incidents}</td>
+                                        <td>All detected incidents</td>
+                                    </tr>
+                                ` : ''}
                                 <tr>
                                     <td>Critical Security Alerts</td>
-                                    <td class="value-cell">${report.counts?.critical || 0}</td>
+                                    <td class="value-cell">${report.severity_breakdown?.critical ?? report.counts?.critical ?? 0}</td>
                                     <td>Immediate action required</td>
                                 </tr>
                                 <tr>
                                     <td>High Priority Incidents</td>
-                                    <td class="value-cell">${report.counts?.high || 0}</td>
+                                    <td class="value-cell">${report.severity_breakdown?.high ?? report.counts?.high ?? 0}</td>
                                     <td>Elevated risk level</td>
                                 </tr>
                                 <tr>
-                                    <td>Unique IP Addresses Detected</td>
-                                    <td class="value-cell">${report.unique_ips?.length || 0}</td>
-                                    <td>Network traffic analysis</td>
+                                    <td>Medium Priority Incidents</td>
+                                    <td class="value-cell">${report.severity_breakdown?.medium ?? report.counts?.medium ?? 0}</td>
+                                    <td>Moderate risk level</td>
                                 </tr>
-                                <tr>
-                                    <td>Security Rules Triggered</td>
-                                    <td class="value-cell">${report.unique_rules?.length || 0}</td>
-                                    <td>Policy enforcement events</td>
-                                </tr>
+                                ${report.unique_ips?.length ? `
+                                    <tr>
+                                        <td>Unique IP Addresses Detected</td>
+                                        <td class="value-cell">${report.unique_ips.length}</td>
+                                        <td>Network traffic analysis</td>
+                                    </tr>
+                                ` : ''}
+                                ${report.unique_rules?.length ? `
+                                    <tr>
+                                        <td>Security Rules Triggered</td>
+                                        <td class="value-cell">${report.unique_rules.length}</td>
+                                        <td>Policy enforcement events</td>
+                                    </tr>
+                                ` : ''}
                             </tbody>
                         </table>
                     </div>
+                    
+                    ${report.notable_incidents && report.notable_incidents.length > 0 ? `
+                        <!-- Notable Incidents -->
+                        <div class="section">
+                            <div class="section-title">${report.key_insights ? 'IV' : 'II'}. Notable Security Incidents</div>
+                            <p style="margin-bottom: 12px; font-size: 10pt; color: #2a2a2a;">The following critical incidents require immediate attention:</p>
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 50px;">No.</th>
+                                        <th style="width: 150px;">Correlation Key</th>
+                                        <th>Incident Description</th>
+                                        <th style="width: 100px;">Risk Level</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${report.notable_incidents.map((incident, index) => `
+                                        <tr>
+                                            <td style="text-align: center;">${index + 1}</td>
+                                            <td style="font-family: 'Courier New', monospace; font-weight: 600;">${incident.correlation_key || 'N/A'}</td>
+                                            <td>${incident.reason || 'No description available'}</td>
+                                            <td style="font-weight: 700; text-transform: uppercase; color: ${
+                                                incident.risk_level?.toLowerCase() === 'critical' ? '#dc2626' :
+                                                incident.risk_level?.toLowerCase() === 'high' ? '#ea580c' :
+                                                '#ca8a04'
+                                            };">${incident.risk_level || 'Medium'}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    ` : ''}
+                    
+                    ${report.trend_analysis ? `
+                        <!-- Trend Analysis -->
+                        <div class="section">
+                            <div class="section-title">${report.notable_incidents ? 'V' : report.key_insights ? 'IV' : 'III'}. Trend Analysis</div>
+                            <table class="stats-table">
+                                <thead>
+                                    <tr>
+                                        <th>Activity Trend</th>
+                                        <th>Analysis</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td style="font-weight: 700; text-transform: uppercase; text-align: center; font-size: 12pt; color: ${
+                                            report.trend_analysis.activity_trend === 'increasing' ? '#dc2626' :
+                                            report.trend_analysis.activity_trend === 'decreasing' ? '#16a34a' :
+                                            '#2563eb'
+                                        };">${report.trend_analysis.activity_trend || 'Stable'}</td>
+                                        <td style="line-height: 1.7; text-align: justify;">${report.trend_analysis.commentary || 'No significant trends detected'}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    ` : ''}
+                    
+                    ${report.risk_assessment ? `
+                        <!-- Risk Assessment -->
+                        <div class="section">
+                            <div class="section-title">${report.trend_analysis ? 'VI' : report.notable_incidents ? 'V' : 'IV'}. Risk Assessment</div>
+                            <div class="executive-summary">
+                                <p style="line-height: 1.7; text-align: justify;">${report.risk_assessment}</p>
+                            </div>
+                        </div>
+                    ` : ''}
                     
                     ${report.unique_ips && report.unique_ips.length > 0 ? `
                         <!-- IP Address Analysis -->
@@ -452,11 +555,11 @@ function Reports({ darkMode, setDarkMode }) {
                     ${report.recommendations && report.recommendations.length > 0 ? `
                         <!-- Recommendations -->
                         <div class="section">
-                            <div class="section-title">IV. Recommendations & Action Items</div>
+                            <div class="section-title">${report.risk_assessment ? 'VII' : report.trend_analysis ? 'VI' : 'V'}. Recommendations & Action Items</div>
                             <p style="margin-bottom: 12px; font-size: 10pt; color: #2a2a2a;">Based on the analysis conducted, the following recommendations are provided:</p>
                             <div class="recommendations">
-                                ${report.recommendations.map(rec => `
-                                    <div class="recommendation-item">${rec}</div>
+                                ${report.recommendations.map((rec, index) => `
+                                    <div class="recommendation-item"><strong>${index + 1}.</strong> ${rec}</div>
                                 `).join('')}
                             </div>
                         </div>
@@ -802,7 +905,7 @@ function Reports({ darkMode, setDarkMode }) {
                                     <div className="flex-1">
                                         <Title className="text-gray-900 dark:text-gray-100 text-xl mb-3">Executive Summary</Title>
                                         <Text className="text-gray-700 dark:text-gray-300 text-base leading-relaxed whitespace-pre-wrap">
-                                            {report.summary || report.json?.summary || 'No summary available'}
+                                            {report.executive_summary || report.summary || report.json?.summary || 'No summary available'}
                                         </Text>
                                     </div>
                                 </div>
@@ -811,13 +914,13 @@ function Reports({ darkMode, setDarkMode }) {
                             {/* Statistics Grid */}
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 {/* Critical Alerts */}
-                                {report.counts?.critical !== undefined && (
+                                {(report.severity_breakdown?.critical !== undefined || report.counts?.critical !== undefined) && (
                                     <Card className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
                                         <div className="flex items-center justify-between">
                                             <div>
                                                 <Text className="text-gray-500 dark:text-gray-400 text-sm">Critical</Text>
                                                 <Title className="text-3xl font-bold text-red-600 dark:text-red-400 mt-1">
-                                                    {report.counts.critical}
+                                                    {report.severity_breakdown?.critical ?? report.counts?.critical ?? 0}
                                                 </Title>
                                             </div>
                                             <div className="bg-red-100 dark:bg-red-900/30 p-3 rounded-lg">
@@ -830,13 +933,13 @@ function Reports({ darkMode, setDarkMode }) {
                                 )}
 
                                 {/* High Alerts */}
-                                {report.counts?.high !== undefined && (
+                                {(report.severity_breakdown?.high !== undefined || report.counts?.high !== undefined) && (
                                     <Card className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
                                         <div className="flex items-center justify-between">
                                             <div>
                                                 <Text className="text-gray-500 dark:text-gray-400 text-sm">High</Text>
                                                 <Title className="text-3xl font-bold text-orange-600 dark:text-orange-400 mt-1">
-                                                    {report.counts.high}
+                                                    {report.severity_breakdown?.high ?? report.counts?.high ?? 0}
                                                 </Title>
                                             </div>
                                             <div className="bg-orange-100 dark:bg-orange-900/30 p-3 rounded-lg">
@@ -848,25 +951,174 @@ function Reports({ darkMode, setDarkMode }) {
                                     </Card>
                                 )}
 
-                                {/* Unique IPs */}
-                                {report.unique_ips !== undefined && Array.isArray(report.unique_ips) && (
+                                {/* Medium Severity */}
+                                {(report.severity_breakdown?.medium !== undefined || report.counts?.medium !== undefined) && (
                                     <Card className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
                                         <div className="flex items-center justify-between">
                                             <div>
-                                                <Text className="text-gray-500 dark:text-gray-400 text-sm">Unique IPs</Text>
-                                                <Title className="text-3xl font-bold text-purple-600 dark:text-purple-400 mt-1">
-                                                    {report.unique_ips.length}
+                                                <Text className="text-gray-500 dark:text-gray-400 text-sm">Medium</Text>
+                                                <Title className="text-3xl font-bold text-yellow-600 dark:text-yellow-400 mt-1">
+                                                    {report.severity_breakdown?.medium ?? report.counts?.medium ?? 0}
                                                 </Title>
                                             </div>
-                                            <div className="bg-purple-100 dark:bg-purple-900/30 p-3 rounded-lg">
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-purple-600 dark:text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                                            <div className="bg-yellow-100 dark:bg-yellow-900/30 p-3 rounded-lg">
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-yellow-600 dark:text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                                </svg>
+                                            </div>
+                                        </div>
+                                    </Card>
+                                )}
+
+                                {/* Total Incidents */}
+                                {report.incident_overview?.total_incidents !== undefined && (
+                                    <Card className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <Text className="text-gray-500 dark:text-gray-400 text-sm">Total Incidents</Text>
+                                                <Title className="text-3xl font-bold text-blue-600 dark:text-blue-400 mt-1">
+                                                    {report.incident_overview.total_incidents}
+                                                </Title>
+                                            </div>
+                                            <div className="bg-blue-100 dark:bg-blue-900/30 p-3 rounded-lg">
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                                                 </svg>
                                             </div>
                                         </div>
                                     </Card>
                                 )}
                             </div>
+
+                            {/* Key Insights Section */}
+                            {report.key_insights && Array.isArray(report.key_insights) && report.key_insights.length > 0 && (
+                                <Card className="bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-800 dark:to-gray-700 border border-indigo-200 dark:border-gray-600">
+                                    <Title className="text-gray-900 dark:text-gray-100 text-xl mb-4 flex items-center gap-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                                        </svg>
+                                        Key Insights
+                                    </Title>
+                                    <div className="space-y-3">
+                                        {report.key_insights.map((insight, index) => (
+                                            <div key={index} className="flex items-start gap-3 bg-white dark:bg-gray-800/50 p-4 rounded-lg">
+                                                <div className="bg-indigo-600 text-white rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0 text-sm font-bold">
+                                                    {index + 1}
+                                                </div>
+                                                <Text className="text-gray-700 dark:text-gray-300 flex-1">{insight}</Text>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </Card>
+                            )}
+
+                            {/* What Changed Section */}
+                            {report.what_changed && (
+                                <Card className="bg-gradient-to-br from-cyan-50 to-blue-50 dark:from-gray-800 dark:to-gray-700 border border-cyan-200 dark:border-gray-600">
+                                    <Title className="text-gray-900 dark:text-gray-100 text-xl mb-4 flex items-center gap-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-cyan-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                                        </svg>
+                                        Period Comparison
+                                    </Title>
+                                    <Text className="text-gray-700 dark:text-gray-300 leading-relaxed">{report.what_changed}</Text>
+                                </Card>
+                            )}
+
+                            {/* Notable Incidents Section */}
+                            {report.notable_incidents && Array.isArray(report.notable_incidents) && report.notable_incidents.length > 0 && (
+                                <Card className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                                    <Title className="text-gray-900 dark:text-gray-100 text-xl mb-4 flex items-center gap-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                        </svg>
+                                        Notable Incidents
+                                    </Title>
+                                    <div className="space-y-4">
+                                        {report.notable_incidents.map((incident, index) => (
+                                            <div key={index} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:shadow-md transition-shadow">
+                                                <div className="flex items-start justify-between mb-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-mono text-sm bg-gray-100 dark:bg-gray-700 px-3 py-1 rounded">
+                                                            {incident.correlation_key}
+                                                        </span>
+                                                        <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                                                            incident.risk_level?.toLowerCase() === 'critical' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' :
+                                                            incident.risk_level?.toLowerCase() === 'high' ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400' :
+                                                            'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                                        }`}>
+                                                            {incident.risk_level}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <Text className="text-gray-700 dark:text-gray-300">{incident.reason}</Text>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </Card>
+                            )}
+
+                            {/* Trend Analysis Section */}
+                            {report.trend_analysis && (
+                                <Card className="bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-gray-800 dark:to-gray-700 border border-emerald-200 dark:border-gray-600">
+                                    <Title className="text-gray-900 dark:text-gray-100 text-xl mb-4 flex items-center gap-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                                        </svg>
+                                        Trend Analysis
+                                    </Title>
+                                    <div className="space-y-3">
+                                        <div className="flex items-center gap-3">
+                                            <Text className="text-gray-600 dark:text-gray-400 font-semibold">Activity Trend:</Text>
+                                            <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                                                report.trend_analysis.activity_trend === 'increasing' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' :
+                                                report.trend_analysis.activity_trend === 'decreasing' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
+                                                'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
+                                            }`}>
+                                                {report.trend_analysis.activity_trend}
+                                            </span>
+                                        </div>
+                                        <Text className="text-gray-700 dark:text-gray-300 leading-relaxed">
+                                            {report.trend_analysis.commentary}
+                                        </Text>
+                                    </div>
+                                </Card>
+                            )}
+
+                            {/* Risk Assessment Section */}
+                            {report.risk_assessment && (
+                                <Card className="bg-gradient-to-br from-rose-50 to-pink-50 dark:from-gray-800 dark:to-gray-700 border border-rose-200 dark:border-gray-600">
+                                    <Title className="text-gray-900 dark:text-gray-100 text-xl mb-4 flex items-center gap-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-rose-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                        </svg>
+                                        Risk Assessment
+                                    </Title>
+                                    <Text className="text-gray-700 dark:text-gray-300 leading-relaxed">{report.risk_assessment}</Text>
+                                </Card>
+                            )}
+
+                            {/* Recommendations Section */}
+                            {report.recommendations && Array.isArray(report.recommendations) && report.recommendations.length > 0 && (
+                                <Card className="bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-gray-800 dark:to-gray-700 border border-amber-200 dark:border-gray-600">
+                                    <Title className="text-gray-900 dark:text-gray-100 text-xl mb-4 flex items-center gap-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                                        </svg>
+                                        Recommendations
+                                    </Title>
+                                    <div className="space-y-3">
+                                        {report.recommendations.map((recommendation, index) => (
+                                            <div key={index} className="flex items-start gap-3 bg-white dark:bg-gray-800/50 p-4 rounded-lg">
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                                <Text className="text-gray-700 dark:text-gray-300 flex-1">{recommendation}</Text>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </Card>
+                            )}
 
                             {/* Download Button Section */}
                             <div className="flex justify-end mt-6 mb-6">
