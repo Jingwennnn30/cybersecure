@@ -10,6 +10,11 @@ function Reports({ darkMode, setDarkMode }) {
     const [report, setReport] = useState(null);
     const [error, setError] = useState(null);
     const [showDownloadModal, setShowDownloadModal] = useState(false);
+    const [showEmailModal, setShowEmailModal] = useState(false);
+    const [emailConfirmed, setEmailConfirmed] = useState(false);
+    const [emailSending, setEmailSending] = useState(false);
+    const [emailSuccess, setEmailSuccess] = useState(false);
+    const [emailError, setEmailError] = useState(null);
 
     // Function to generate report by calling n8n webhook
     const generateReport = async () => {
@@ -699,6 +704,54 @@ function Reports({ darkMode, setDarkMode }) {
         setShowDownloadModal(false);
     };
 
+    // Email report to system administrators
+    const sendEmailReport = async () => {
+        if (!emailConfirmed) {
+            setEmailError('Please confirm before sending');
+            return;
+        }
+
+        setEmailSending(true);
+        setEmailError(null);
+
+        try {
+            // Call backend endpoint that triggers n8n email workflow
+            const response = await fetch('http://localhost:4000/api/email-report', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    report: report,
+                    period: {
+                        start: startDate,
+                        end: endDate || startDate
+                    },
+                    timestamp: new Date().toISOString()
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to send email report');
+            }
+
+            const data = await response.json();
+            setEmailSuccess(true);
+            
+            // Reset modal after 2 seconds
+            setTimeout(() => {
+                setShowEmailModal(false);
+                setEmailConfirmed(false);
+                setEmailSuccess(false);
+            }, 2000);
+        } catch (err) {
+            setEmailError(err.message || 'Failed to send email. Please try again.');
+            console.error('Error sending email:', err);
+        } finally {
+            setEmailSending(false);
+        }
+    };
+
     // Set date range based on mode
     const setQuickDateRange = (selectedMode) => {
         setMode(selectedMode);
@@ -1120,8 +1173,18 @@ function Reports({ darkMode, setDarkMode }) {
                                 </Card>
                             )}
 
-                            {/* Download Button Section */}
-                            <div className="flex justify-end mt-6 mb-6">
+                            {/* Action Buttons Section */}
+                            <div className="flex justify-end gap-3 mt-6 mb-6">
+                                <button
+                                    onClick={() => setShowEmailModal(true)}
+                                    className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors shadow-md hover:shadow-lg"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                        <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
+                                        <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
+                                    </svg>
+                                    Email Report
+                                </button>
                                 <button
                                     onClick={() => setShowDownloadModal(true)}
                                     className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors shadow-md hover:shadow-lg"
@@ -1314,6 +1377,145 @@ function Reports({ darkMode, setDarkMode }) {
                                     </svg>
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Email Report Modal */}
+            {showEmailModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full transform transition-all">
+                        <div className="p-6">
+                            {/* Header */}
+                            <div className="flex items-center justify-between mb-6">
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-green-100 dark:bg-green-900/30 p-2 rounded-lg">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                        </svg>
+                                    </div>
+                                    <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">Email Report</h3>
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        setShowEmailModal(false);
+                                        setEmailConfirmed(false);
+                                        setEmailError(null);
+                                        setEmailSuccess(false);
+                                    }}
+                                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            {/* Success Message */}
+                            {emailSuccess && (
+                                <div className="mb-4 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                                    <div className="flex items-center gap-2 text-green-800 dark:text-green-400">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                        </svg>
+                                        <span className="font-semibold">Report sent successfully!</span>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Error Message */}
+                            {emailError && (
+                                <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                                    <div className="flex items-center gap-2 text-red-800 dark:text-red-400">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                                        </svg>
+                                        <span className="font-semibold">{emailError}</span>
+                                    </div>
+                                </div>
+                            )}
+
+                            {!emailSuccess && (
+                                <>
+                                    {/* Message */}
+                                    <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                                        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+                                            This will send the security analysis report to all system administrators via email. 
+                                            The report includes executive summary, security metrics, and recommendations.
+                                        </p>
+                                    </div>
+
+                                    {/* Report Details */}
+                                    <div className="mb-6 space-y-2 text-sm">
+                                        <div className="flex justify-between">
+                                            <span className="text-gray-600 dark:text-gray-400">Report Period:</span>
+                                            <span className="font-semibold text-gray-900 dark:text-gray-100">
+                                                {startDate} to {endDate || startDate}
+                                            </span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-gray-600 dark:text-gray-400">Recipients:</span>
+                                            <span className="font-semibold text-gray-900 dark:text-gray-100">All System Administrators</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-gray-600 dark:text-gray-400">Format:</span>
+                                            <span className="font-semibold text-gray-900 dark:text-gray-100">PDF Attachment</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Confirmation Checkbox */}
+                                    <div className="mb-6">
+                                        <label className="flex items-start gap-3 cursor-pointer group">
+                                            <input
+                                                type="checkbox"
+                                                checked={emailConfirmed}
+                                                onChange={(e) => setEmailConfirmed(e.target.checked)}
+                                                className="mt-1 w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500 focus:ring-2"
+                                            />
+                                            <span className="text-sm text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-gray-100">
+                                                I confirm that I want to send this confidential security report to all system administrators
+                                            </span>
+                                        </label>
+                                    </div>
+
+                                    {/* Action Buttons */}
+                                    <div className="flex gap-3">
+                                        <button
+                                            onClick={() => {
+                                                setShowEmailModal(false);
+                                                setEmailConfirmed(false);
+                                                setEmailError(null);
+                                            }}
+                                            className="flex-1 px-4 py-2.5 border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={sendEmailReport}
+                                            disabled={!emailConfirmed || emailSending}
+                                            className="flex-1 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                        >
+                                            {emailSending ? (
+                                                <>
+                                                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                    </svg>
+                                                    Sending...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                        <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+                                                    </svg>
+                                                    Send Report
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     </div>
                 </div>
