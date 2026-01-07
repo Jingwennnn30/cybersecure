@@ -6,7 +6,8 @@ import { Listbox, Transition } from '@headlessui/react';
 
 const roles = [
   { value: 'admin', label: 'Admin', color: 'bg-amber-100 text-amber-800 border-amber-400' },
-  { value: 'analyst', label: 'Analyst', color: 'bg-blue-100 text-blue-800 border-blue-400' },
+  { value: 'analyst_i', label: 'Analyst I', color: 'bg-blue-100 text-blue-800 border-blue-400' },
+  { value: 'analyst_ii', label: 'Analyst II', color: 'bg-indigo-100 text-indigo-800 border-indigo-400' },
   { value: 'viewer', label: 'Viewer', color: 'bg-gray-100 text-gray-800 border-gray-400' },
 ];
 

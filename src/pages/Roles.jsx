@@ -18,7 +18,7 @@ function Roles({ darkMode, setDarkMode }) {
 
     // For role request modal
     const [showRequestModal, setShowRequestModal] = useState(false);
-    const [requestedRole, setRequestedRole] = useState("analyst");
+    const [requestedRole, setRequestedRole] = useState("analyst_i");
     const [requestMessage, setRequestMessage] = useState("");
 
     // Fetch users from Firestore
@@ -186,12 +186,22 @@ function Roles({ darkMode, setDarkMode }) {
                                                 color={
                                                     user.role === 'admin'
                                                         ? 'amber'
-                                                        : user.role === 'analyst'
-                                                            ? 'yellow'
-                                                            : 'gray'
+                                                        : user.role === 'analyst_i'
+                                                            ? 'blue'
+                                                            : user.role === 'analyst_ii'
+                                                                ? 'indigo'
+                                                                : user.role === 'analyst'
+                                                                    ? 'yellow'
+                                                                    : 'gray'
                                                 }
                                             >
-                                                {user.role}
+                                                {user.role === 'analyst_i' 
+                                                    ? 'Analyst I' 
+                                                    : user.role === 'analyst_ii' 
+                                                        ? 'Analyst II' 
+                                                        : user.role === 'analyst'
+                                                            ? 'Analyst (Legacy)'
+                                                            : user.role}
                                             </Badge>
                                         </TableCell>
                                         <TableCell>
@@ -223,7 +233,7 @@ function Roles({ darkMode, setDarkMode }) {
                     {/* Role Permissions */}
                     <Card className="mt-8 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-md rounded-xl">
                         <Title className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Role Permissions</Title>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                             <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
                                 <Text className="font-medium mb-2 text-gray-700 dark:text-gray-200">Admin</Text>
                                 <div className="flex flex-wrap gap-2">
@@ -231,14 +241,24 @@ function Roles({ darkMode, setDarkMode }) {
                                     <Badge color="amber">User Management</Badge>
                                     <Badge color="amber">System Configuration</Badge>
                                     <Badge color="amber">Alert Management</Badge>
+                                    <Badge color="amber">Generate Reports</Badge>
                                 </div>
                             </div>
                             <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
-                                <Text className="font-medium mb-2 text-gray-700 dark:text-gray-200">Analyst</Text>
+                                <Text className="font-medium mb-2 text-gray-700 dark:text-gray-200">Analyst I</Text>
                                 <div className="flex flex-wrap gap-2">
-                                    <Badge color="gray">View Alerts</Badge>
-                                    <Badge color="gray">Analyze Threats</Badge>
-                                    <Badge color="gray">Update Status</Badge>
+                                    <Badge color="blue">View Alerts</Badge>
+                                    <Badge color="blue">Analyze Threats</Badge>
+                                    <Badge color="blue">Generate Reports</Badge>
+                                </div>
+                            </div>
+                            <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
+                                <Text className="font-medium mb-2 text-gray-700 dark:text-gray-200">Analyst II</Text>
+                                <div className="flex flex-wrap gap-2">
+                                    <Badge color="indigo">View Alerts</Badge>
+                                    <Badge color="indigo">Analyze Threats</Badge>
+                                    <Badge color="indigo">Update Status</Badge>
+                                    <Badge color="indigo">Generate Reports</Badge>
                                 </div>
                             </div>
                             <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
@@ -280,7 +300,8 @@ function Roles({ darkMode, setDarkMode }) {
                                                 value={requestedRole}
                                                 onChange={e => setRequestedRole(e.target.value)}
                                             >
-                                                <option value="analyst">Analyst</option>
+                                                <option value="analyst_i">Analyst I</option>
+                                                <option value="analyst_ii">Analyst II</option>
                                                 <option value="admin">Admin</option>
                                             </select>
                                             <div className="flex justify-end space-x-2">
