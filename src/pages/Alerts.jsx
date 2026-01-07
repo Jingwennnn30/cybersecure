@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import Navigation from "../components/Navigation";
+import { useRole } from "../contexts/RoleContext";
+import { auth } from "../firebase";
 
 function Alerts({ darkMode, setDarkMode }) {
     const [alerts, setAlerts] = useState([]);
@@ -12,6 +14,8 @@ function Alerts({ darkMode, setDarkMode }) {
         identity: false,
         normalized: false
     });
+    const role = useRole();
+    const [showAssignmentMessage, setShowAssignmentMessage] = useState(false);
 
     // Pagination state
     const [currentPage, setCurrentPage] = useState(1);
@@ -33,20 +37,40 @@ function Alerts({ darkMode, setDarkMode }) {
     };
 
     useEffect(() => {
-        fetch('/api/alerts')
-            .then(res => res.json())
-            .then(data => {
-                // Ensure data is always an array
-                console.log('Received alerts data:', data);
+        const fetchAlerts = async () => {
+            try {
+                const currentUser = auth.currentUser;
+                if (!currentUser || !role) {
+                    console.log('No user or role, skipping fetch');
+                    setLoading(false);
+                    return;
+                }
+                
+                console.log('Fetching alerts for user:', currentUser.uid, 'role:', role);
+                
+                const params = new URLSearchParams({
+                    userId: currentUser.uid,
+                    userRole: role
+                });
+                
+                const response = await fetch(`/api/alerts?${params}`);
+                const data = await response.json();
+                
+                console.log('Received alerts data count:', data.length);
+                console.log('Sample alert:', data[0]);
                 setAlerts(Array.isArray(data) ? data : []);
                 setLoading(false);
-            })
-            .catch((error) => {
+            } catch (error) {
                 console.error('Error fetching alerts:', error);
                 setAlerts([]);
                 setLoading(false);
-            });
-    }, []);
+            }
+        };
+
+        if (role) {
+            fetchAlerts();
+        }
+    }, [role]);
 
     // Filtering logic
     const filteredAlerts = alerts.filter(alert => {
@@ -89,6 +113,42 @@ function Alerts({ darkMode, setDarkMode }) {
         setCurrentPage(1);
     }, [search, severity, status, riskScore, fromDate, toDate]);
 
+    // Handle initial assignment (Admin only)
+    const handleInitialAssignment = async () => {
+        if (role !== 'admin') return;
+        
+        setShowAssignmentMessage(false);
+        setLoading(true);
+        
+        try {
+            const response = await fetch('/api/alerts/auto-assign-initial', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                setShowAssignmentMessage(`Successfully assigned ${result.assignmentCount} alerts to ${result.analystICount} Analyst I and ${result.analystIICount} Analyst II users.`);
+                // Refresh alerts
+                const params = new URLSearchParams({
+                    userId: auth.currentUser.uid,
+                    userRole: role
+                });
+                const alertsResponse = await fetch(`/api/alerts?${params}`);
+                const data = await alertsResponse.json();
+                setAlerts(Array.isArray(data) ? data : []);
+            } else {
+                setShowAssignmentMessage(result.message || 'Assignment failed');
+            }
+        } catch (error) {
+            console.error('Error during assignment:', error);
+            setShowAssignmentMessage('Error: Failed to assign alerts');
+        }
+        
+        setLoading(false);
+    };
+
     return (
         <div className="min-h-screen bg-background-light text-text-default dark:bg-gray-900 dark:text-gray-100 transition-colors">
             <div className="flex min-h-screen">
@@ -103,13 +163,48 @@ function Alerts({ darkMode, setDarkMode }) {
                 </aside>
                 <main className="flex-1 p-8">
                     <div className="flex items-center justify-between mb-6">
-                        <h2 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-100">
-                            Alert Management
-                        </h2>
+                        <div className="flex items-center gap-4">
+                            <h2 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-100">
+                                Alert Management
+                            </h2>
+                            {role === 'admin' && (
+                                <button
+                                    onClick={handleInitialAssignment}
+                                    disabled={loading}
+                                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-semibold disabled:opacity-50"
+                                >
+                                    {loading ? 'Assigning...' : 'Auto-Assign Alerts'}
+                                </button>
+                            )}
+                        </div>
                         <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded text-xs font-semibold">
                             Timezone: Malaysia Time (GMT+8)
                         </span>
                     </div>
+                    
+                    {/* Assignment Success Message */}
+                    {showAssignmentMessage && (
+                        <div className="bg-green-100 dark:bg-green-900 border border-green-400 dark:border-green-600 text-green-800 dark:text-green-200 px-4 py-3 rounded mb-4">
+                            {showAssignmentMessage}
+                        </div>
+                    )}
+                    
+                    {/* Role Info Banner */}
+                    {(role === 'analyst_i' || role === 'analyst_ii') && (
+                        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200 px-4 py-3 rounded mb-4">
+                            <div className="flex items-center">
+                                <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                </svg>
+                                {filteredAlerts.length === 0 ? (
+                                    <span><strong>No alerts assigned yet.</strong> Please contact an administrator to assign alerts to you.</span>
+                                ) : (
+                                    <span>Showing only alerts assigned to you ({filteredAlerts.length} alerts)</span>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                    
                     {/* Filters */}
                     <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6 flex flex-col md:flex-row gap-4 items-end">
                         <div className="flex items-center border border-gray-300 dark:border-gray-700 rounded px-2 py-1 flex-1">
@@ -204,6 +299,11 @@ function Alerts({ darkMode, setDarkMode }) {
                                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                         Timestamp
                                     </th>
+                                    {role === 'admin' && (
+                                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                            Assigned To
+                                        </th>
+                                    )}
                                     <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                         Actions
                                     </th>
@@ -212,11 +312,11 @@ function Alerts({ darkMode, setDarkMode }) {
                             <tbody>
                                 {loading ? (
                                     <tr>
-                                        <td colSpan={7} className="text-center py-8">Loading...</td>
+                                        <td colSpan={role === 'admin' ? 8 : 7} className="text-center py-8">Loading...</td>
                                     </tr>
                                 ) : paginatedAlerts.length === 0 ? (
                                     <tr>
-                                        <td colSpan={7} className="text-center py-8 text-gray-400">
+                                        <td colSpan={role === 'admin' ? 8 : 7} className="text-center py-8 text-gray-400">
                                             No alerts found.
                                         </td>
                                     </tr>
@@ -249,6 +349,22 @@ function Alerts({ darkMode, setDarkMode }) {
                                                     ? new Date(alert.timestamp).toLocaleString()
                                                     : ""}
                                             </td>
+                                            {role === 'admin' && (
+                                                <td className="px-4 py-3">
+                                                    {alert.assignment ? (
+                                                        <div className="text-xs">
+                                                            <div className="font-semibold">{alert.assignment.assignedToName}</div>
+                                                            <div className="text-gray-500">
+                                                                {alert.assignment.assignedToRole === 'analyst_i' ? 'Analyst I' : 
+                                                                 alert.assignment.assignedToRole === 'analyst_ii' ? 'Analyst II' : 
+                                                                 alert.assignment.assignedToRole}
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-gray-400 text-xs italic">Unassigned</span>
+                                                    )}
+                                                </td>
+                                            )}
                                             <td className="px-4 py-3 text-center">
                                                 <button
                                                     className="p-2 rounded hover:bg-blue-100 dark:hover:bg-blue-900"

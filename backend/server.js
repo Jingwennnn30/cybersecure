@@ -374,7 +374,9 @@ app.get('/api/dashboard-stats', async (req, res) => {
 
 app.get('/api/alerts', async (req, res) => {
   try {
-    console.log('Fetching alerts from ClickHouse...');
+    const { userId, userRole } = req.query;
+    console.log('Fetching alerts from ClickHouse for user:', userId, 'role:', userRole);
+    
     const result = await client.query({
       query: `
         SELECT 
@@ -423,6 +425,53 @@ app.get('/api/alerts', async (req, res) => {
       };
     });
 
+    // If admin, return all alerts
+    if (userRole === 'admin') {
+      // Fetch assignments from Firestore for all alerts
+      const assignmentsSnapshot = await db.collection('alertAssignments').get();
+      const assignmentsMap = {};
+      assignmentsSnapshot.forEach(doc => {
+        assignmentsMap[doc.data().alertId] = doc.data();
+      });
+
+      const alertsWithAssignments = enrichedData.map(alert => ({
+        ...alert,
+        assignment: assignmentsMap[alert.correlation_key] || null
+      }));
+
+      return res.json(alertsWithAssignments);
+    }
+
+    // For Analyst I and Analyst II, only return assigned alerts
+    if (userRole === 'analyst_i' || userRole === 'analyst_ii') {
+      console.log('Filtering alerts for analyst. UserId:', userId, 'Role:', userRole);
+      
+      const assignmentsSnapshot = await db.collection('alertAssignments')
+        .where('assignedTo', '==', userId)
+        .get();
+      
+      console.log('Found assignments:', assignmentsSnapshot.size);
+      
+      const assignedAlertIds = new Set();
+      const assignmentsMap = {};
+      assignmentsSnapshot.forEach(doc => {
+        const data = doc.data();
+        assignedAlertIds.add(data.alertId);
+        assignmentsMap[data.alertId] = data;
+      });
+
+      const filteredAlerts = enrichedData
+        .filter(alert => assignedAlertIds.has(alert.correlation_key))
+        .map(alert => ({
+          ...alert,
+          assignment: assignmentsMap[alert.correlation_key]
+        }));
+
+      console.log('Returning filtered alerts count:', filteredAlerts.length);
+      return res.json(filteredAlerts);
+    }
+
+    // For other roles (viewer, etc.), return all alerts without assignment info
     res.json(enrichedData);
   } catch (err) {
     console.error('Error in /api/alerts:', err);
@@ -430,6 +479,297 @@ app.get('/api/alerts', async (req, res) => {
     // Return empty array instead of error object to prevent frontend crashes
     console.warn('Returning empty array due to database connection error');
     res.json([]);
+  }
+});
+
+// Endpoint: Assign alerts to analysts
+app.post('/api/alerts/assign', async (req, res) => {
+  try {
+    const { alertIds, userId, userName, userRole } = req.body;
+    
+    if (!alertIds || !Array.isArray(alertIds) || alertIds.length === 0) {
+      return res.status(400).json({ error: 'Invalid alertIds' });
+    }
+    
+    const batch = db.batch();
+    const timestamp = admin.firestore.FieldValue.serverTimestamp();
+    
+    for (const alertId of alertIds) {
+      const assignmentRef = db.collection('alertAssignments').doc();
+      batch.set(assignmentRef, {
+        alertId,
+        assignedTo: userId,
+        assignedToName: userName,
+        assignedToRole: userRole,
+        assignedAt: timestamp,
+        status: 'assigned'
+      });
+    }
+    
+    await batch.commit();
+    res.json({ success: true, count: alertIds.length });
+  } catch (err) {
+    console.error('Error assigning alerts:', err);
+    res.status(500).json({ error: 'Failed to assign alerts' });
+  }
+});
+
+// Endpoint: Auto-assign alerts for initial setup
+app.post('/api/alerts/auto-assign-initial', async (req, res) => {
+  try {
+    console.log('Starting initial auto-assignment...');
+    
+    // Fetch all alerts from ClickHouse
+    const result = await client.query({
+      query: `
+        SELECT 
+          correlation_key,
+          severity
+        FROM alert_enriched_events 
+        WHERE event_time > '1970-01-01 00:00:01'
+        ORDER BY event_time DESC
+        LIMIT 1500
+      `,
+      format: 'JSONEachRow'
+    });
+    
+    const alerts = await result.json();
+    console.log('Total alerts fetched:', alerts.length);
+    
+    // Fetch all analysts from Firebase
+    const usersSnapshot = await db.collection('users').get();
+    const analystI = [];
+    const analystII = [];
+    
+    usersSnapshot.forEach(doc => {
+      const userData = { id: doc.id, ...doc.data() };
+      if (userData.role === 'analyst_i') analystI.push(userData);
+      if (userData.role === 'analyst_ii') analystII.push(userData);
+    });
+    
+    console.log('Analyst I count:', analystI.length);
+    console.log('Analyst II count:', analystII.length);
+    
+    if (analystI.length === 0 && analystII.length === 0) {
+      return res.json({ 
+        success: false, 
+        message: 'No analysts found. Please create analyst accounts first.' 
+      });
+    }
+    
+    // Check existing assignments
+    const existingAssignments = await db.collection('alertAssignments').get();
+    const assignedAlertIds = new Set();
+    existingAssignments.forEach(doc => {
+      assignedAlertIds.add(doc.data().alertId);
+    });
+    
+    // Filter out already assigned alerts
+    const unassignedAlerts = alerts.filter(alert => !assignedAlertIds.has(alert.correlation_key));
+    console.log('Unassigned alerts:', unassignedAlerts.length);
+    
+    // Categorize alerts by severity
+    const mediumLowAlerts = unassignedAlerts.filter(a => 
+      a.severity === 'medium' || a.severity === 'low'
+    );
+    const highCriticalAlerts = unassignedAlerts.filter(a => 
+      a.severity === 'high' || a.severity === 'critical'
+    );
+    
+    // Helper function to randomly select alerts with diverse timestamps
+    const selectDiverseAlerts = (alertsArray, count) => {
+      const selected = [];
+      const arrayClone = [...alertsArray];
+      
+      // Calculate step size to spread across the array
+      const stepSize = Math.max(3, Math.floor(arrayClone.length / count));
+      
+      for (let i = 0; i < count && arrayClone.length > 0; i++) {
+        // Pick from different sections of the array
+        const sectionStart = i * stepSize;
+        const sectionEnd = Math.min(sectionStart + stepSize * 2, arrayClone.length);
+        const sectionSize = sectionEnd - sectionStart;
+        
+        if (sectionSize > 0) {
+          const randomIndex = sectionStart + Math.floor(Math.random() * sectionSize);
+          const validIndex = Math.min(randomIndex, arrayClone.length - 1);
+          selected.push(arrayClone[validIndex]);
+          arrayClone.splice(validIndex, 1);
+        }
+      }
+      
+      return selected;
+    };
+    
+    const batch = db.batch();
+    const timestamp = admin.firestore.FieldValue.serverTimestamp();
+    let assignmentCount = 0;
+    
+    // Assign 4-9 medium/low alerts to each Analyst I
+    if (analystI.length > 0) {
+      for (const analyst of analystI) {
+        const alertsToAssign = Math.floor(Math.random() * 6) + 4; // 4-9 alerts
+        const selectedAlerts = selectDiverseAlerts(mediumLowAlerts, Math.min(alertsToAssign, mediumLowAlerts.length));
+        
+        // Remove selected alerts from the pool
+        selectedAlerts.forEach(selected => {
+          const index = mediumLowAlerts.findIndex(a => a.correlation_key === selected.correlation_key);
+          if (index > -1) mediumLowAlerts.splice(index, 1);
+        });
+        
+        for (const alert of selectedAlerts) {
+          const assignmentRef = db.collection('alertAssignments').doc();
+          batch.set(assignmentRef, {
+            alertId: alert.correlation_key,
+            assignedTo: analyst.id,
+            assignedToName: analyst.name,
+            assignedToRole: 'analyst_i',
+            assignedAt: timestamp,
+            status: 'assigned',
+            severity: alert.severity
+          });
+          assignmentCount++;
+        }
+      }
+    }
+    
+    // Assign 4-9 high/critical alerts to each Analyst II
+    if (analystII.length > 0) {
+      for (const analyst of analystII) {
+        const alertsToAssign = Math.floor(Math.random() * 6) + 4; // 4-9 alerts
+        const selectedAlerts = selectDiverseAlerts(highCriticalAlerts, Math.min(alertsToAssign, highCriticalAlerts.length));
+        
+        // Remove selected alerts from the pool
+        selectedAlerts.forEach(selected => {
+          const index = highCriticalAlerts.findIndex(a => a.correlation_key === selected.correlation_key);
+          if (index > -1) highCriticalAlerts.splice(index, 1);
+        });
+        
+        for (const alert of selectedAlerts) {
+          const assignmentRef = db.collection('alertAssignments').doc();
+          batch.set(assignmentRef, {
+            alertId: alert.correlation_key,
+            assignedTo: analyst.id,
+            assignedToName: analyst.name,
+            assignedToRole: 'analyst_ii',
+            assignedAt: timestamp,
+            status: 'assigned',
+            severity: alert.severity
+          });
+          assignmentCount++;
+        }
+      }
+    }
+    
+    await batch.commit();
+    console.log('Initial assignment completed. Total assignments:', assignmentCount);
+    
+    res.json({ 
+      success: true, 
+      assignmentCount,
+      analystICount: analystI.length,
+      analystIICount: analystII.length
+    });
+  } catch (err) {
+    console.error('Error in auto-assign-initial:', err);
+    res.status(500).json({ error: 'Failed to auto-assign alerts' });
+  }
+});
+
+// Endpoint: Auto-assign new incoming alerts (for future use)
+app.post('/api/alerts/auto-assign-new', async (req, res) => {
+  try {
+    const { alertIds } = req.body; // Array of new alert IDs
+    
+    if (!alertIds || !Array.isArray(alertIds)) {
+      return res.status(400).json({ error: 'Invalid alertIds' });
+    }
+    
+    // Fetch alert details from ClickHouse
+    const alertIdsList = alertIds.map(id => `'${id}'`).join(',');
+    const result = await client.query({
+      query: `
+        SELECT 
+          correlation_key,
+          severity
+        FROM alert_enriched_events 
+        WHERE correlation_key IN (${alertIdsList})
+      `,
+      format: 'JSONEachRow'
+    });
+    
+    const alerts = await result.json();
+    
+    // Fetch analysts
+    const usersSnapshot = await db.collection('users').get();
+    const analystI = [];
+    const analystII = [];
+    
+    usersSnapshot.forEach(doc => {
+      const userData = { id: doc.id, ...doc.data() };
+      if (userData.role === 'analyst_i') analystI.push(userData);
+      if (userData.role === 'analyst_ii') analystII.push(userData);
+    });
+    
+    if (analystI.length === 0 && analystII.length === 0) {
+      return res.json({ success: false, message: 'No analysts available' });
+    }
+    
+    // Categorize alerts
+    const mediumLowAlerts = alerts.filter(a => a.severity === 'medium' || a.severity === 'low');
+    const highCriticalAlerts = alerts.filter(a => a.severity === 'high' || a.severity === 'critical');
+    
+    const batch = db.batch();
+    const timestamp = admin.firestore.FieldValue.serverTimestamp();
+    let assignmentCount = 0;
+    
+    // Assign 2-3 medium/low alerts to random Analyst I
+    if (analystI.length > 0 && mediumLowAlerts.length > 0) {
+      const alertsToAssign = Math.min(Math.floor(Math.random() * 2) + 2, mediumLowAlerts.length); // 2-3 alerts
+      const randomAnalyst = analystI[Math.floor(Math.random() * analystI.length)];
+      
+      for (let i = 0; i < alertsToAssign; i++) {
+        const alert = mediumLowAlerts[i];
+        const assignmentRef = db.collection('alertAssignments').doc();
+        batch.set(assignmentRef, {
+          alertId: alert.correlation_key,
+          assignedTo: randomAnalyst.id,
+          assignedToName: randomAnalyst.name,
+          assignedToRole: 'analyst_i',
+          assignedAt: timestamp,
+          status: 'assigned',
+          severity: alert.severity
+        });
+        assignmentCount++;
+      }
+    }
+    
+    // Assign 2-3 high/critical alerts to random Analyst II
+    if (analystII.length > 0 && highCriticalAlerts.length > 0) {
+      const alertsToAssign = Math.min(Math.floor(Math.random() * 2) + 2, highCriticalAlerts.length); // 2-3 alerts
+      const randomAnalyst = analystII[Math.floor(Math.random() * analystII.length)];
+      
+      for (let i = 0; i < alertsToAssign; i++) {
+        const alert = highCriticalAlerts[i];
+        const assignmentRef = db.collection('alertAssignments').doc();
+        batch.set(assignmentRef, {
+          alertId: alert.correlation_key,
+          assignedTo: randomAnalyst.id,
+          assignedToName: randomAnalyst.name,
+          assignedToRole: 'analyst_ii',
+          assignedAt: timestamp,
+          status: 'assigned',
+          severity: alert.severity
+        });
+        assignmentCount++;
+      }
+    }
+    
+    await batch.commit();
+    res.json({ success: true, assignmentCount });
+  } catch (err) {
+    console.error('Error in auto-assign-new:', err);
+    res.status(500).json({ error: 'Failed to auto-assign new alerts' });
   }
 });
 
