@@ -203,7 +203,7 @@ function Dashboard({ darkMode, setDarkMode }) {
     setShowRecipientsPanel(true);
     setLoadingRecipients(true);
     try {
-      const res = await fetch('http://localhost:4000/get-notification-recipients');
+      const res = await fetch('/api/get-notification-recipients');
       const data = await res.json();
       setRecipients(Array.isArray(data.users) ? data.users : []);
     } catch (err) {

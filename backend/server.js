@@ -240,7 +240,7 @@ app.get('/api/live-alerts', (req, res) => {
 });
 
 // New endpoint for both admin and analyst
-app.get('/get-notification-recipients', async (req, res) => {
+app.get('/api/get-notification-recipients', async (req, res) => {
   try {
     const snapshot = await db.collection('users')
       .where('role', 'in', ['admin', 'analyst'])
