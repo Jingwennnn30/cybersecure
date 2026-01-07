@@ -5,6 +5,13 @@ function Alerts({ darkMode, setDarkMode }) {
     const [alerts, setAlerts] = useState([]);
     const [selectedAlert, setSelectedAlert] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [expandedSections, setExpandedSections] = useState({
+        asset: true,
+        auth: false,
+        correlation: false,
+        identity: false,
+        normalized: false
+    });
 
     // Pagination state
     const [currentPage, setCurrentPage] = useState(1);
@@ -17,6 +24,13 @@ function Alerts({ darkMode, setDarkMode }) {
     const [riskScore, setRiskScore] = useState("");
     const [fromDate, setFromDate] = useState("");
     const [toDate, setToDate] = useState("");
+
+    const toggleSection = (section) => {
+        setExpandedSections(prev => ({
+            ...prev,
+            [section]: !prev[section]
+        }));
+    };
 
     useEffect(() => {
         fetch('/api/alerts')
@@ -314,14 +328,24 @@ function Alerts({ darkMode, setDarkMode }) {
                                 {/* Body */}
                                 <div className="px-8 py-6">
                                     <div className="mb-4 flex flex-wrap gap-6">
-                                        <div>
-                                            <div className="text-xs text-gray-500 dark:text-gray-400">IP</div>
-                                            <div className="font-semibold">{selectedAlert.ip || 'N/A'}</div>
-                                        </div>
-                                        <div>
-                                            <div className="text-xs text-gray-500 dark:text-gray-400">Port</div>
-                                            <div className="font-semibold">{selectedAlert.port || 'N/A'}</div>
-                                        </div>
+                                        {selectedAlert.ip && (
+                                            <div>
+                                                <div className="text-xs text-gray-500 dark:text-gray-400">Source IP</div>
+                                                <div className="font-semibold">{selectedAlert.ip}</div>
+                                            </div>
+                                        )}
+                                        {selectedAlert.user && (
+                                            <div>
+                                                <div className="text-xs text-gray-500 dark:text-gray-400">User</div>
+                                                <div className="font-semibold">{selectedAlert.user}</div>
+                                            </div>
+                                        )}
+                                        {selectedAlert.host && (
+                                            <div>
+                                                <div className="text-xs text-gray-500 dark:text-gray-400">Host</div>
+                                                <div className="font-semibold">{selectedAlert.host}</div>
+                                            </div>
+                                        )}
                                         <div>
                                             <div className="text-xs text-gray-500 dark:text-gray-400">Severity</div>
                                             <span className={`inline-block px-2 py-1 rounded text-xs font-semibold
@@ -333,40 +357,251 @@ function Alerts({ darkMode, setDarkMode }) {
                                                             ? "bg-yellow-200 text-yellow-800"
                                                             : "bg-green-200 text-green-800"
                                                 }`}>
-                                                {selectedAlert.severity || 'N/A'}
+                                                {selectedAlert.severity}
                                             </span>
                                         </div>
                                         <div>
                                             <div className="text-xs text-gray-500 dark:text-gray-400">Risk Score</div>
-                                            <div className="font-semibold">{selectedAlert.risk_score || 'N/A'}</div>
+                                            <div className="font-semibold">{selectedAlert.risk_score}</div>
                                         </div>
+                                        {selectedAlert.risk_level && (
+                                            <div>
+                                                <div className="text-xs text-gray-500 dark:text-gray-400">Risk Level</div>
+                                                <span className={`inline-block px-2 py-1 rounded text-xs font-semibold
+                                                    ${selectedAlert.risk_level === "critical" || selectedAlert.risk_level === "high"
+                                                        ? "bg-red-200 text-red-800"
+                                                        : selectedAlert.risk_level === "medium"
+                                                            ? "bg-yellow-200 text-yellow-800"
+                                                            : "bg-green-200 text-green-800"
+                                                    }`}>
+                                                    {selectedAlert.risk_level}
+                                                </span>
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="mb-4">
-                                        <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Rule Name</div>
+                                        <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Alert Name</div>
                                         <div className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-                                            {selectedAlert.name || selectedAlert.rule_name || 'N/A'}
+                                            {selectedAlert.name}
                                         </div>
                                     </div>
-                                    <div className="mb-4">
-                                        <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Reason</div>
-                                        <div className="text-sm text-gray-800 dark:text-gray-200">
-                                            {selectedAlert.reason || 'No reason provided'}
+                                    {selectedAlert.alert_type && (
+                                        <div className="mb-4">
+                                            <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Alert Type</div>
+                                            <div className="text-sm text-gray-800 dark:text-gray-200">
+                                                {selectedAlert.alert_type}
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                        <div>
-                                            <div className="text-xs text-gray-500 dark:text-gray-400">Port Type</div>
-                                            <div className="font-semibold">{selectedAlert.port_type || 'N/A'}</div>
+                                    )}
+                                    {selectedAlert.kill_chain_phase && (
+                                        <div className="mb-4">
+                                            <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Kill Chain Phase</div>
+                                            <div className="text-sm">
+                                                <span className="px-2 py-1 bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 rounded text-xs font-semibold">
+                                                    {selectedAlert.kill_chain_phase}
+                                                </span>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <div className="text-xs text-gray-500 dark:text-gray-400">Time Category</div>
-                                            <div className="font-semibold">{selectedAlert.time_category || 'N/A'}</div>
+                                    )}
+                                    {selectedAlert.correlation_key && (
+                                        <div className="mb-4">
+                                            <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Correlation Key</div>
+                                            <div className="text-xs font-mono bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded inline-block">
+                                                {selectedAlert.correlation_key}
+                                            </div>
                                         </div>
-                                        <div>
-                                            <div className="text-xs text-gray-500 dark:text-gray-400">Direction</div>
-                                            <div className="font-semibold">{selectedAlert.direction || 'N/A'}</div>
+                                    )}
+
+                                    {/* Enhanced Payload Information */}
+                                    {selectedAlert.parsedPayload && Object.keys(selectedAlert.parsedPayload).length > 0 && (
+                                        <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-4">
+                                            <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-4">Enrichment Details</h4>
+                                            
+                                            {/* Asset Information */}
+                                            {selectedAlert.parsedPayload.asset && (
+                                                <div className="mb-4">
+                                                    <button
+                                                        onClick={() => toggleSection('asset')}
+                                                        className="flex items-center justify-between w-full text-left text-sm font-semibold text-gray-800 dark:text-gray-200 bg-gray-50 dark:bg-gray-800 px-3 py-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                                                    >
+                                                        <span>Asset Information</span>
+                                                        <svg className={`w-4 h-4 transform transition-transform ${expandedSections.asset ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                        </svg>
+                                                    </button>
+                                                    {expandedSections.asset && (
+                                                        <div className="mt-2 pl-4 grid grid-cols-2 gap-3 text-sm">
+                                                            {selectedAlert.parsedPayload.asset.business_unit && (
+                                                                <div>
+                                                                    <span className="text-gray-500 dark:text-gray-400">Business Unit:</span>
+                                                                    <span className="ml-2 font-medium">{selectedAlert.parsedPayload.asset.business_unit}</span>
+                                                                </div>
+                                                            )}
+                                                            {selectedAlert.parsedPayload.asset.criticality && (
+                                                                <div>
+                                                                    <span className="text-gray-500 dark:text-gray-400">Criticality:</span>
+                                                                    <span className={`ml-2 px-2 py-0.5 rounded text-xs font-semibold ${
+                                                                        selectedAlert.parsedPayload.asset.criticality === 'high' ? 'bg-red-200 text-red-800' :
+                                                                        selectedAlert.parsedPayload.asset.criticality === 'medium' ? 'bg-yellow-200 text-yellow-800' :
+                                                                        'bg-green-200 text-green-800'
+                                                                    }`}>{selectedAlert.parsedPayload.asset.criticality}</span>
+                                                                </div>
+                                                            )}
+                                                            {selectedAlert.parsedPayload.asset.environment && (
+                                                                <div>
+                                                                    <span className="text-gray-500 dark:text-gray-400">Environment:</span>
+                                                                    <span className="ml-2 font-medium">{selectedAlert.parsedPayload.asset.environment}</span>
+                                                                </div>
+                                                            )}
+                                                            {selectedAlert.parsedPayload.asset.internet_exposed !== undefined && (
+                                                                <div>
+                                                                    <span className="text-gray-500 dark:text-gray-400">Internet Exposed:</span>
+                                                                    <span className={`ml-2 px-2 py-0.5 rounded text-xs font-semibold ${
+                                                                        selectedAlert.parsedPayload.asset.internet_exposed ? 'bg-red-200 text-red-800' : 'bg-green-200 text-green-800'
+                                                                    }`}>{selectedAlert.parsedPayload.asset.internet_exposed ? 'Yes' : 'No'}</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            {/* Authentication Enrichment */}
+                                            {selectedAlert.parsedPayload.auth_enrichment && (
+                                                <div className="mb-4">
+                                                    <button
+                                                        onClick={() => toggleSection('auth')}
+                                                        className="flex items-center justify-between w-full text-left text-sm font-semibold text-gray-800 dark:text-gray-200 bg-gray-50 dark:bg-gray-800 px-3 py-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                                                    >
+                                                        <span>Authentication Details</span>
+                                                        <svg className={`w-4 h-4 transform transition-transform ${expandedSections.auth ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                        </svg>
+                                                    </button>
+                                                    {expandedSections.auth && (
+                                                        <div className="mt-2 pl-4 space-y-2 text-sm">
+                                                            {selectedAlert.parsedPayload.auth_enrichment.attack_type && (
+                                                                <div>
+                                                                    <span className="text-gray-500 dark:text-gray-400">Attack Type:</span>
+                                                                    <span className="ml-2 font-medium text-red-600 dark:text-red-400">{selectedAlert.parsedPayload.auth_enrichment.attack_type}</span>
+                                                                </div>
+                                                            )}
+                                                            {selectedAlert.parsedPayload.auth_enrichment.failed_logon !== undefined && (
+                                                                <div>
+                                                                    <span className="text-gray-500 dark:text-gray-400">Failed Logon:</span>
+                                                                    <span className="ml-2 font-medium">{selectedAlert.parsedPayload.auth_enrichment.failed_logon ? 'Yes' : 'No'}</span>
+                                                                </div>
+                                                            )}
+                                                            {selectedAlert.parsedPayload.auth_enrichment.mitigation && (
+                                                                <div>
+                                                                    <span className="text-gray-500 dark:text-gray-400">Mitigation:</span>
+                                                                    <span className="ml-2 font-medium text-blue-600 dark:text-blue-400">{selectedAlert.parsedPayload.auth_enrichment.mitigation}</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            {/* Correlation Information */}
+                                            {selectedAlert.parsedPayload.correlation && (
+                                                <div className="mb-4">
+                                                    <button
+                                                        onClick={() => toggleSection('correlation')}
+                                                        className="flex items-center justify-between w-full text-left text-sm font-semibold text-gray-800 dark:text-gray-200 bg-gray-50 dark:bg-gray-800 px-3 py-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                                                    >
+                                                        <span>Correlation Analysis</span>
+                                                        <svg className={`w-4 h-4 transform transition-transform ${expandedSections.correlation ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                        </svg>
+                                                    </button>
+                                                    {expandedSections.correlation && (
+                                                        <div className="mt-2 pl-4 space-y-2 text-sm">
+                                                            {selectedAlert.parsedPayload.correlation.correlation_key && (
+                                                                <div>
+                                                                    <span className="text-gray-500 dark:text-gray-400">Correlation Key:</span>
+                                                                    <span className="ml-2 font-mono text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">{selectedAlert.parsedPayload.correlation.correlation_key}</span>
+                                                                </div>
+                                                            )}
+                                                            {selectedAlert.parsedPayload.correlation.kill_chain && (
+                                                                <div className="mt-2">
+                                                                    <div className="text-gray-500 dark:text-gray-400 mb-1">Kill Chain:</div>
+                                                                    <div className="pl-2 space-y-1">
+                                                                        {selectedAlert.parsedPayload.correlation.kill_chain.phase && (
+                                                                            <div>
+                                                                                <span className="text-gray-500 dark:text-gray-400">Phase:</span>
+                                                                                <span className="ml-2 px-2 py-0.5 bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 rounded text-xs font-semibold">{selectedAlert.parsedPayload.correlation.kill_chain.phase}</span>
+                                                                            </div>
+                                                                        )}
+                                                                        {selectedAlert.parsedPayload.correlation.kill_chain.confidence && (
+                                                                            <div>
+                                                                                <span className="text-gray-500 dark:text-gray-400">Confidence:</span>
+                                                                                <span className="ml-2 font-medium">{selectedAlert.parsedPayload.correlation.kill_chain.confidence}</span>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            {/* Identity Enrichment */}
+                                            {selectedAlert.parsedPayload.identity_enrichment && (
+                                                <div className="mb-4">
+                                                    <button
+                                                        onClick={() => toggleSection('identity')}
+                                                        className="flex items-center justify-between w-full text-left text-sm font-semibold text-gray-800 dark:text-gray-200 bg-gray-50 dark:bg-gray-800 px-3 py-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                                                    >
+                                                        <span>Identity Information</span>
+                                                        <svg className={`w-4 h-4 transform transition-transform ${expandedSections.identity ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                        </svg>
+                                                    </button>
+                                                    {expandedSections.identity && (
+                                                        <div className="mt-2 pl-4 grid grid-cols-2 gap-3 text-sm">
+                                                            {selectedAlert.parsedPayload.identity_enrichment.detection_method && (
+                                                                <div>
+                                                                    <span className="text-gray-500 dark:text-gray-400">Detection Method:</span>
+                                                                    <span className="ml-2 font-medium">{selectedAlert.parsedPayload.identity_enrichment.detection_method}</span>
+                                                                </div>
+                                                            )}
+                                                            {selectedAlert.parsedPayload.identity_enrichment.identity_type && (
+                                                                <div>
+                                                                    <span className="text-gray-500 dark:text-gray-400">Identity Type:</span>
+                                                                    <span className="ml-2 font-medium">{selectedAlert.parsedPayload.identity_enrichment.identity_type}</span>
+                                                                </div>
+                                                            )}
+                                                            {selectedAlert.parsedPayload.identity_enrichment.is_service_account !== undefined && (
+                                                                <div>
+                                                                    <span className="text-gray-500 dark:text-gray-400">Service Account:</span>
+                                                                    <span className="ml-2 font-medium">{selectedAlert.parsedPayload.identity_enrichment.is_service_account ? 'Yes' : 'No'}</span>
+                                                                </div>
+                                                            )}
+                                                            {selectedAlert.parsedPayload.identity_enrichment.privilege_level && (
+                                                                <div>
+                                                                    <span className="text-gray-500 dark:text-gray-400">Privilege Level:</span>
+                                                                    <span className="ml-2 font-medium">{selectedAlert.parsedPayload.identity_enrichment.privilege_level}</span>
+                                                                </div>
+                                                            )}
+                                                            {selectedAlert.parsedPayload.identity_enrichment.risk_level && (
+                                                                <div className="col-span-2">
+                                                                    <span className="text-gray-500 dark:text-gray-400">Risk Level:</span>
+                                                                    <span className={`ml-2 px-2 py-0.5 rounded text-xs font-semibold ${
+                                                                        selectedAlert.parsedPayload.identity_enrichment.risk_level === 'high' ? 'bg-red-200 text-red-800' :
+                                                                        selectedAlert.parsedPayload.identity_enrichment.risk_level === 'medium' ? 'bg-yellow-200 text-yellow-800' :
+                                                                        'bg-green-200 text-green-800'
+                                                                    }`}>{selectedAlert.parsedPayload.identity_enrichment.risk_level}</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
-                                    </div>
+                                    )}
+
                                     {/* Investigate Button */}
                                     <div className="flex justify-end">
                                         <button

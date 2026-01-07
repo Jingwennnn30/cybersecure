@@ -130,6 +130,55 @@ app.post('/api/generate-report', async (req, res) => {
   }
 });
 
+// Email report endpoint - triggers n8n email workflow
+app.post('/api/email-report', async (req, res) => {
+  try {
+    const { report, period, timestamp } = req.body;
+    
+    // n8n webhook URL for email workflow - UPDATE THIS WITH YOUR N8N WEBHOOK URL
+    const webhookUrl = 'https://webhook.csnet.my/webhook/YOUR_EMAIL_WORKFLOW_WEBHOOK_ID';
+    
+    console.log('Triggering n8n email workflow with report data');
+    
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ 
+        report,
+        period,
+        timestamp,
+        action: 'email_report'
+      })
+    });
+
+    const responseText = await response.text();
+    console.log('Email workflow response status:', response.status);
+
+    if (!response.ok) {
+      console.error('Email workflow error:', responseText);
+      throw new Error(`Email workflow returned ${response.status}`);
+    }
+
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (e) {
+      data = { success: true, message: 'Email sent successfully' };
+    }
+
+    console.log('Email workflow response:', data);
+    res.json({ success: true, message: 'Report email sent successfully', data });
+  } catch (error) {
+    console.error('Error triggering email workflow:', error);
+    res.status(500).json({ 
+      error: 'Failed to send email report', 
+      message: error.message
+    });
+  }
+});
+
 // n8n webhook POSTs here
 app.post('/webhook/alerts', (req, res) => {
   const alert = req.body;
@@ -334,11 +383,13 @@ app.get('/api/alerts', async (req, res) => {
           source_ip as ip,
           severity,
           risk_score,
+          risk_level,
           alert_name as name,
           alert_type,
           user,
           host,
           kill_chain_phase,
+          auto_escalate,
           payload
         FROM alert_enriched_events 
         WHERE event_time > '1970-01-01 00:00:01'
@@ -355,7 +406,24 @@ app.get('/api/alerts', async (req, res) => {
       console.log('Sample row:', data[0]);
     }
 
-    res.json(data);
+    // Parse and extract important payload fields for easier frontend access
+    const enrichedData = data.map(alert => {
+      let parsedPayload = {};
+      try {
+        if (alert.payload) {
+          parsedPayload = typeof alert.payload === 'string' ? JSON.parse(alert.payload) : alert.payload;
+        }
+      } catch (e) {
+        console.error('Error parsing payload for alert:', alert.correlation_key, e);
+      }
+
+      return {
+        ...alert,
+        parsedPayload
+      };
+    });
+
+    res.json(enrichedData);
   } catch (err) {
     console.error('Error in /api/alerts:', err);
     console.error('Error details:', err.message, err.stack);
