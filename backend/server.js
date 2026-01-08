@@ -135,10 +135,12 @@ app.post('/api/email-report', async (req, res) => {
   try {
     const { report, period, timestamp } = req.body;
     
-    // n8n webhook URL for email workflow - UPDATE THIS WITH YOUR N8N WEBHOOK URL
-    const webhookUrl = 'https://webhook.csnet.my/webhook/YOUR_EMAIL_WORKFLOW_WEBHOOK_ID';
+    // n8n webhook URL for email workflow - Production URL
+    const webhookUrl = 'https://webhook.csnet.my/webhook/email-report';
     
     console.log('Triggering n8n email workflow with report data');
+    console.log('Report data keys:', Object.keys(report || {}));
+    console.log('Period:', period);
     
     const response = await fetch(webhookUrl, {
       method: 'POST',
@@ -240,7 +242,7 @@ app.get('/api/live-alerts', (req, res) => {
 });
 
 // New endpoint for both admin and analyst
-app.get('/get-notification-recipients', async (req, res) => {
+app.get('/api/get-notification-recipients', async (req, res) => {
   try {
     const snapshot = await db.collection('users')
       .where('role', 'in', ['admin', 'analyst'])

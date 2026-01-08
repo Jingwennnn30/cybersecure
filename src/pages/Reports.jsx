@@ -34,7 +34,7 @@ function Reports({ darkMode, setDarkMode }) {
             };
 
             // Call backend proxy endpoint to avoid CORS issues
-            const response = await fetch('http://localhost:4000/api/generate-report', {
+            const response = await fetch('/api/generate-report', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -716,7 +716,7 @@ function Reports({ darkMode, setDarkMode }) {
 
         try {
             // Call backend endpoint that triggers n8n email workflow
-            const response = await fetch('http://localhost:4000/api/email-report', {
+            const response = await fetch('/api/email-report', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
