@@ -8,6 +8,7 @@ import {
   UserGroupIcon,
   DocumentChartBarIcon,
   ArrowRightOnRectangleIcon,
+  UserCircleIcon,
 } from '@heroicons/react/24/outline';
 import { signOut } from "firebase/auth";
 import { auth, db } from "../firebase";
@@ -65,18 +66,25 @@ function Navigation() {
   const navigate = useNavigate();
   const [user] = useAuthState(auth);
   const [role, setRole] = useState(() => sessionStorage.getItem('userRole'));
+  const [userData, setUserData] = useState({ name: '', email: '' });
 
   useEffect(() => {
     const fetchRole = async () => {
       if (user) {
         const userDoc = await getDoc(doc(db, 'users', user.uid));
         if (userDoc.exists()) {
-          const fetchedRole = userDoc.data().role;
+          const data = userDoc.data();
+          const fetchedRole = data.role;
           setRole(fetchedRole);
+          setUserData({
+            name: data.name || 'User',
+            email: data.email || user.email || ''
+          });
           sessionStorage.setItem('userRole', fetchedRole);
         }
       } else {
         setRole(null);
+        setUserData({ name: '', email: '' });
         sessionStorage.removeItem('userRole');
       }
     };
@@ -94,6 +102,36 @@ function Navigation() {
 
   return (
     <nav className="space-y-1 px-2 flex flex-col h-full">
+      {/* User Profile Section */}
+      {user && (
+        <div className="mb-4 p-4 bg-gradient-to-r from-amber-50 to-amber-100 dark:from-gray-800 dark:to-gray-700 rounded-lg border border-amber-200 dark:border-gray-600">
+          <div className="flex items-start space-x-3">
+            <div className="flex-shrink-0">
+              <UserCircleIcon className="h-12 w-12 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
+                {userData.name}
+              </p>
+              <p className="text-xs text-gray-600 dark:text-gray-300 truncate mt-0.5">
+                {userData.email}
+              </p>
+              <div className="mt-1.5">
+                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                  role === 'admin' 
+                    ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' 
+                    : role === 'analyst'
+                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                    : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                }`}>
+                  {role ? role.charAt(0).toUpperCase() + role.slice(1) : 'User'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
       <div className="flex-1">
         {navigation
           .filter(item => !item.adminOnly || role === 'admin')
