@@ -394,9 +394,9 @@ app.get('/api/alerts', async (req, res) => {
           auto_escalate,
           payload
         FROM alert_enriched_events 
-        WHERE event_time > '1970-01-01 00:00:01'
+        WHERE event_time > now() - INTERVAL 7 DAY
         ORDER BY event_time DESC
-        LIMIT 1000
+        LIMIT 5000
       `,
       format: 'JSONEachRow'
     });
@@ -446,6 +446,182 @@ app.get('/api/alerts', async (req, res) => {
     if (userRole === 'analyst_i' || userRole === 'analyst_ii') {
       console.log('Filtering alerts for analyst. UserId:', userId, 'Role:', userRole);
       
+      // For Analyst II, query escalated alerts directly from ClickHouse
+      if (userRole === 'analyst_ii') {
+        console.log('Fetching escalated alerts for Analyst II. Current User ID:', userId);
+        
+        // First, let's see ALL escalated alerts to debug
+        const allEscalatedSnapshot = await db.collection('investigation_statuses')
+          .where('escalated', '==', true)
+          .get();
+        
+        console.log('DEBUG: Total escalated alerts in Firestore:', allEscalatedSnapshot.size);
+        allEscalatedSnapshot.forEach(doc => {
+          const data = doc.data();
+          console.log('DEBUG: Escalated alert:', doc.id, 'assignedToUID:', data.assignedToUID, 'assignedToName:', data.assignedToName);
+        });
+        
+        const escalatedSnapshot = await db.collection('investigation_statuses')
+          .where('escalated', '==', true)
+          .where('assignedToUID', '==', userId)
+          .get();
+        
+        console.log('Found escalated investigation statuses for current user:', escalatedSnapshot.size);
+        
+        if (escalatedSnapshot.size === 0) {
+          console.log('No escalated alerts found for user:', userId);
+          return res.json([]);
+        }
+        
+        // Extract correlation_key and timestamp from uniqueIds
+        const escalatedConditions = [];
+        const escalationMap = new Map();
+        const escalatedUniqueIds = new Set(); // Store exact uniqueIds
+        
+        escalatedSnapshot.forEach(doc => {
+          const uniqueId = doc.id;
+          const docData = doc.data();
+          console.log('DEBUG: Processing escalated doc:', {
+            uniqueId,
+            assignedToName: docData.assignedToName,
+            escalatedAt: docData.escalatedAt
+          });
+          
+          // Parse uniqueId format: correlation_key-YYYY-MM-DD HH:MM:SS-index
+          // Use regex to extract correlation_key and timestamp
+          const match = uniqueId.match(/^(.+)-(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})-\d+$/);
+          
+          if (match) {
+            const correlationKey = match[1];
+            const timestamp = match[2];
+            
+            console.log('Parsing escalated uniqueId:', uniqueId);
+            console.log('  -> correlation_key:', correlationKey);
+            console.log('  -> timestamp:', timestamp);
+            
+            escalatedConditions.push({ correlationKey, timestamp });
+            escalatedUniqueIds.add(uniqueId); // Store exact uniqueId
+            escalationMap.set(uniqueId, {
+              escalated: true,
+              escalatedFrom: doc.data().escalatedBy,
+              escalatedAt: doc.data().escalatedAt,
+              escalationReason: doc.data().escalationReason
+            });
+          } else {
+            console.error('Failed to parse uniqueId:', uniqueId);
+          }
+        });
+        
+        // Query ClickHouse for specific escalated alerts
+        const whereConditions = escalatedConditions.map(c => 
+          `(correlation_key = '${c.correlationKey.replace(/'/g, "\\'")}' AND event_time = '${c.timestamp}')`
+        ).join(' OR ');
+        
+        console.log('Querying ClickHouse with conditions:', whereConditions.substring(0, 200));
+        
+        const escalatedResult = await client.query({
+          query: `
+            SELECT 
+              correlation_key,
+              event_time as timestamp,
+              source_ip as ip,
+              severity,
+              risk_score,
+              risk_level,
+              alert_name as name,
+              alert_type,
+              user,
+              host,
+              kill_chain_phase,
+              auto_escalate,
+              payload
+            FROM alert_enriched_events 
+            WHERE ${whereConditions}
+            ORDER BY event_time DESC
+          `,
+          format: 'JSONEachRow'
+        });
+        
+        const escalatedData = await escalatedResult.json();
+        console.log('Found escalated alerts in ClickHouse:', escalatedData.length);
+        
+        if (escalatedData.length === 0) {
+          console.warn('⚠️ No alerts found in ClickHouse for escalated conditions!');
+          console.warn('This could mean:');
+          console.warn('1. Alerts are older than ClickHouse retention period');
+          console.warn('2. Timestamp format mismatch between Firestore and ClickHouse');
+          console.warn('3. correlation_key contains special characters that need escaping');
+        }
+        
+        // Group by correlation_key + timestamp to match with uniqueIds
+        const groupedAlerts = {};
+        escalatedData.forEach(alert => {
+          const key = `${alert.correlation_key}-${alert.timestamp}`;
+          if (!groupedAlerts[key]) {
+            groupedAlerts[key] = [];
+          }
+          groupedAlerts[key].push(alert);
+        });
+        
+        // Only return alerts that match escalated uniqueIds
+        const escalatedAlerts = [];
+        const notFoundIds = [];
+        
+        for (const uniqueId of escalatedUniqueIds) {
+          // Extract index from uniqueId
+          const indexMatch = uniqueId.match(/-(\d+)$/);
+          if (!indexMatch) continue;
+          
+          const index = parseInt(indexMatch[1]);
+          const baseKey = uniqueId.substring(0, uniqueId.lastIndexOf('-'));
+          
+          let alert = null;
+          
+          // Try to get the exact index
+          if (groupedAlerts[baseKey] && groupedAlerts[baseKey][index]) {
+            alert = groupedAlerts[baseKey][index];
+            console.log('✓ Matched escalated alert uniqueId:', uniqueId);
+          } 
+          // If exact index not found, use first available alert with same correlation_key + timestamp
+          else if (groupedAlerts[baseKey] && groupedAlerts[baseKey].length > 0) {
+            alert = groupedAlerts[baseKey][0];
+            console.warn(`⚠️ Index ${index} not found for ${baseKey}, using first available alert (index 0)`);
+          }
+          else {
+            console.error(`❌ No alerts found in ClickHouse for escalated uniqueId:`, uniqueId);
+            notFoundIds.push(uniqueId);
+            continue;
+          }
+          
+          if (alert) {
+            let parsedPayload = {};
+            try {
+              if (alert.payload) {
+                parsedPayload = typeof alert.payload === 'string' ? JSON.parse(alert.payload) : alert.payload;
+              }
+            } catch (e) {
+              console.error('Error parsing payload for alert:', alert.correlation_key, e);
+            }
+            
+            escalatedAlerts.push({
+              ...alert,
+              parsedPayload,
+              assignment: escalationMap.get(uniqueId),
+              _actualIndex: index,  // Include the actual index from uniqueId
+              _uniqueId: uniqueId   // Include the full uniqueId
+            });
+          }
+        }
+        
+        if (notFoundIds.length > 0) {
+          console.warn(`⚠️ ${notFoundIds.length} escalated alerts not found in ClickHouse:`, notFoundIds);
+        }
+        
+        console.log('Returning escalated alerts count:', escalatedAlerts.length);
+        return res.json(escalatedAlerts);
+      }
+      
+      // For Analyst I, use regular assignment filtering
       const assignmentsSnapshot = await db.collection('alertAssignments')
         .where('assignedTo', '==', userId)
         .get();
@@ -905,6 +1081,272 @@ app.get('/api/ai-insights', async (req, res) => {
       likelihoodDistribution: [],
       categoryData: [],
       threatTypeData: []
+    });
+  }
+});
+
+// Investigation workflow endpoints
+
+// Endpoint: Trigger investigation (calls n8n workflow)
+app.post('/api/alerts/investigate', async (req, res) => {
+  try {
+    const { alertId, alertData } = req.body;
+    
+    console.log('Starting investigation for alert:', alertId);
+    console.log('Alert data received:', alertData);
+    
+    // Mark as investigating in Firestore
+    await db.collection('investigation_statuses').doc(alertId).set({
+      status: 'investigating',
+      timestamp: new Date().toISOString(),
+      userResponse: null
+    });
+    
+    // Call n8n webhook with proper fallbacks
+    const n8nWebhookUrl = 'https://webhook.csnet.my/webhook/investigate-alert';
+    
+    const payload = {
+      incident_id: alertId,
+      user_name: alertData.user || alertData.host || 'Unknown User',
+      user_email: 'wongyihan2003@gmail.com',
+      host: alertData.host || alertData.ip || 'Unknown Host',
+      timestamp: alertData.timestamp ? new Date(alertData.timestamp).toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur' }) : new Date().toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur' }),
+      alert_name: alertData.name || 'Security Alert',
+      severity: alertData.severity || 'medium',
+      ip: alertData.ip || 'N/A'
+    };
+    
+    console.log('Sending to n8n:', payload);
+    
+    const response = await fetch(n8nWebhookUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload)
+    });
+    
+    const responseData = await response.json();
+    console.log('n8n webhook response:', responseData);
+    
+    if (!response.ok) {
+      throw new Error(`n8n webhook returned ${response.status}`);
+    }
+    
+    res.json({ 
+      success: true, 
+      message: 'Investigation started, email sent to user',
+      n8nResponse: responseData
+    });
+  } catch (error) {
+    console.error('Error triggering investigation:', error);
+    res.status(500).json({ 
+      error: 'Failed to start investigation', 
+      message: error.message 
+    });
+  }
+});
+
+// Endpoint: Receive user response from n8n
+app.post('/api/alerts/user-response', async (req, res) => {
+  try {
+    const { incident_id, user_answer, received_at } = req.body;
+    
+    console.log('Received user response:', { incident_id, user_answer, received_at });
+    
+    // Get current status from Firestore
+    const docRef = db.collection('investigation_statuses').doc(incident_id);
+    const doc = await docRef.get();
+    
+    const currentStatus = doc.exists ? doc.data() : {
+      status: 'investigating',
+      timestamp: new Date().toISOString()
+    };
+    
+    // Update investigation status in Firestore
+    await docRef.set({
+      ...currentStatus,
+      status: 'responded',
+      userResponse: user_answer,
+      responseTimestamp: received_at || new Date().toISOString()
+    });
+    
+    console.log('Updated investigation status in Firestore');
+    
+    res.json({ 
+      success: true, 
+      message: 'User response recorded'
+    });
+  } catch (error) {
+    console.error('Error recording user response:', error);
+    res.status(500).json({ 
+      error: 'Failed to record response', 
+      message: error.message 
+    });
+  }
+});
+
+// Endpoint: Get investigation status for an alert
+app.get('/api/alerts/:alertId/status', async (req, res) => {
+  try {
+    const { alertId } = req.params;
+    
+    // Get status from Firestore
+    const doc = await db.collection('investigation_statuses').doc(alertId).get();
+    
+    const status = doc.exists ? doc.data() : {
+      status: 'none',
+      userResponse: null
+    };
+    
+    res.json(status);
+  } catch (error) {
+    console.error('Error getting investigation status:', error);
+    res.status(500).json({ 
+      error: 'Failed to get status', 
+      message: error.message 
+    });
+  }
+});
+
+// Endpoint: Get all investigation statuses (batch)
+app.get('/api/alerts/statuses/all', async (req, res) => {
+  try {
+    const { userId, userRole } = req.query;
+    
+    let snapshot;
+    
+    // For Analyst II, only return statuses for alerts assigned to them
+    if (userRole === 'analyst_ii') {
+      console.log('Fetching investigation statuses for Analyst II:', userId);
+      snapshot = await db.collection('investigation_statuses')
+        .where('escalated', '==', true)
+        .where('assignedToUID', '==', userId)
+        .get();
+    } else {
+      // For admin and Analyst I, return all statuses
+      snapshot = await db.collection('investigation_statuses').get();
+    }
+    
+    const statuses = {};
+    snapshot.forEach(doc => {
+      statuses[doc.id] = doc.data();
+    });
+    
+    console.log(`Loaded ${Object.keys(statuses).length} investigation statuses for role: ${userRole}`);
+    res.json(statuses);
+  } catch (error) {
+    console.error('Error getting all investigation statuses:', error);
+    res.status(500).json({ 
+      error: 'Failed to get statuses', 
+      message: error.message 
+    });
+  }
+});
+
+// Endpoint: Get Analyst II users for escalation
+app.get('/api/users/analyst-ii', async (req, res) => {
+  try {
+    const usersSnapshot = await db.collection('users').where('role', '==', 'analyst_ii').get();
+    
+    const analystII = [];
+    usersSnapshot.forEach(doc => {
+      const userData = doc.data();
+      analystII.push({
+        uid: doc.id,
+        name: userData.name || userData.email,
+        email: userData.email
+      });
+    });
+    
+    console.log(`Found ${analystII.length} Analyst II users`);
+    res.json(analystII);
+  } catch (error) {
+    console.error('Error fetching Analyst II users:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch analysts', 
+      message: error.message 
+    });
+  }
+});
+
+// Endpoint: Escalate alert to SOC2
+app.post('/api/alerts/escalate', async (req, res) => {
+  try {
+    const { alertId, alertData, reason, escalatedBy, assignedTo } = req.body;
+    
+    console.log('Escalating alert to Analyst II:', alertId, 'Assigned to:', assignedTo);
+    
+    // Get current investigation status
+    const docRef = db.collection('investigation_statuses').doc(alertId);
+    const doc = await docRef.get();
+    
+    if (!doc.exists) {
+      return res.status(404).json({ 
+        error: 'Alert not found in investigation system' 
+      });
+    }
+    
+    const currentStatus = doc.data();
+    
+    // Update with escalation info
+    await docRef.update({
+      escalated: true,
+      escalatedTo: 'analyst_ii',
+      assignedToUID: assignedTo.uid,
+      assignedToName: assignedTo.name,
+      assignedToEmail: assignedTo.email,
+      escalatedAt: new Date().toISOString(),
+      escalationReason: reason || 'Manual escalation',
+      escalatedBy: escalatedBy || 'Unknown'
+    });
+    
+    // Prepare payload for n8n escalation workflow
+    const n8nEscalationUrl = 'https://webhook.csnet.my/webhook/escalate-alert';
+    
+    const payload = {
+      incident_id: alertId,
+      alert_name: alertData.name || 'Security Alert',
+      severity: alertData.severity || 'medium',
+      user_name: alertData.user || 'Unknown',
+      host: alertData.host || alertData.ip || 'Unknown Host',
+      ip: alertData.ip || 'N/A',
+      timestamp: alertData.timestamp ? new Date(alertData.timestamp).toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur' }) : new Date().toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur' }),
+      user_response: currentStatus.userResponse || 'N/A',
+      escalation_reason: reason || 'Manual escalation',
+      escalated_by: escalatedBy || 'Unknown',
+      assigned_to_name: assignedTo.name,
+      assigned_to_email: assignedTo.email,
+      analyst_email: assignedTo.email // Send to assigned Analyst II
+    };
+    
+    console.log('Sending escalation email to n8n:', payload);
+    
+    // Call n8n webhook to send email
+    const response = await fetch(n8nEscalationUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload)
+    });
+    
+    if (!response.ok) {
+      console.warn('n8n escalation email webhook failed:', response.status);
+      // Don't fail the escalation if email fails
+    } else {
+      console.log('Escalation email sent successfully');
+    }
+    
+    res.json({ 
+      success: true, 
+      message: 'Alert escalated to Analyst II successfully'
+    });
+  } catch (error) {
+    console.error('Error escalating alert:', error);
+    res.status(500).json({ 
+      error: 'Failed to escalate alert', 
+      message: error.message 
     });
   }
 });

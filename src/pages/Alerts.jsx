@@ -17,6 +17,17 @@ function Alerts({ darkMode, setDarkMode }) {
     const role = useRole();
     const [showAssignmentMessage, setShowAssignmentMessage] = useState(false);
 
+    // Investigation state
+    const [investigationStatuses, setInvestigationStatuses] = useState({});
+    const [pollingAlerts, setPollingAlerts] = useState(new Set());
+
+    // Escalation state
+    const [showEscalationModal, setShowEscalationModal] = useState(false);
+    const [escalatingAlert, setEscalatingAlert] = useState(null);
+    const [analystIIList, setAnalystIIList] = useState([]);
+    const [selectedAnalyst, setSelectedAnalyst] = useState('');
+    const [escalationReason, setEscalationReason] = useState('');
+
     // Pagination state
     const [currentPage, setCurrentPage] = useState(1);
     const rowsPerPage = 20;
@@ -58,7 +69,34 @@ function Alerts({ darkMode, setDarkMode }) {
                 
                 console.log('Received alerts data count:', data.length);
                 console.log('Sample alert:', data[0]);
-                setAlerts(Array.isArray(data) ? data : []);
+                
+                // For Analyst II, backend provides _uniqueId. For others, create it
+                const alertsWithUniqueIds = data.map((alert, index) => {
+                    if (alert._uniqueId) {
+                        // Backend already provided uniqueId (for Analyst II)
+                        return alert;
+                    }
+                    // For other roles, create uniqueId from array index
+                    return {
+                        ...alert,
+                        _uniqueId: `${alert.correlation_key || 'no-key'}-${alert.timestamp || Date.now()}-${index}`
+                    };
+                });
+                
+                const keys = data.map(a => a.correlation_key);
+                const uniqueKeys = new Set(keys.filter(k => k));
+                console.log('Alerts with correlation_key:', uniqueKeys.size, '/ Total:', keys.length);
+                if (uniqueKeys.size < keys.length) {
+                    console.warn('⚠️ WARNING: Some alerts missing correlation_key or have duplicates!');
+                }
+                
+                console.log('📊 Alert uniqueIds:', alertsWithUniqueIds.map(a => a._uniqueId));
+                
+                setAlerts(Array.isArray(alertsWithUniqueIds) ? alertsWithUniqueIds : []);
+                
+                // Load investigation statuses for all alerts
+                await loadInvestigationStatuses(alertsWithUniqueIds);
+                
                 setLoading(false);
             } catch (error) {
                 console.error('Error fetching alerts:', error);
@@ -71,6 +109,59 @@ function Alerts({ darkMode, setDarkMode }) {
             fetchAlerts();
         }
     }, [role]);
+
+    // Load investigation statuses for multiple alerts
+    const loadInvestigationStatuses = async (alertsList) => {
+        try {
+            console.log('🔍 Loading investigation statuses for', alertsList.length, 'alerts');
+            
+            const currentUser = auth.currentUser;
+            if (!currentUser || !role) {
+                console.log('No user or role, skipping status fetch');
+                return;
+            }
+            
+            const params = new URLSearchParams({
+                userId: currentUser.uid,
+                userRole: role
+            });
+            
+            // Single API call to get all statuses
+            const response = await fetch(`/api/alerts/statuses/all?${params}`);
+            if (!response.ok) {
+                console.error('Failed to fetch statuses:', response.status);
+                return;
+            }
+            
+            const allStatuses = await response.json();
+            console.log('📦 Received statuses from backend:', Object.keys(allStatuses).length);
+            console.log('Sample status keys:', Object.keys(allStatuses).slice(0, 3));
+            console.log('Sample alert IDs:', alertsList.slice(0, 3).map(a => a._uniqueId));
+            
+            const statuses = {};
+            const polling = new Set();
+
+            alertsList.forEach(alert => {
+                const status = allStatuses[alert._uniqueId];
+                if (status && (status.status === 'investigating' || status.status === 'responded')) {
+                    statuses[alert._uniqueId] = status;
+                    if (status.status === 'investigating') {
+                        polling.add(alert._uniqueId);
+                    }
+                }
+            });
+
+            if (Object.keys(statuses).length > 0) {
+                setInvestigationStatuses(statuses);
+                setPollingAlerts(polling);
+                console.log('✅ Loaded investigation statuses:', Object.keys(statuses).length);
+            } else {
+                console.log('⚠️ No matching investigation statuses found');
+            }
+        } catch (error) {
+            console.error('❌ Error loading investigation statuses:', error);
+        }
+    };
 
     // Filtering logic
     const filteredAlerts = alerts.filter(alert => {
@@ -112,6 +203,216 @@ function Alerts({ darkMode, setDarkMode }) {
     useEffect(() => {
         setCurrentPage(1);
     }, [search, severity, status, riskScore, fromDate, toDate]);
+
+    // Polling effect for investigation statuses
+    useEffect(() => {
+        if (pollingAlerts.size === 0) return;
+        
+        const pollInterval = setInterval(async () => {
+            for (const alertId of pollingAlerts) {
+                try {
+                    const response = await fetch(`http://localhost:4000/api/alerts/${alertId}/status`);
+                    const statusData = await response.json();
+                    
+                    if (statusData.status === 'responded') {
+                        setInvestigationStatuses(prev => ({
+                            ...prev,
+                            [alertId]: statusData
+                        }));
+                        
+                        // Stop polling this alert
+                        setPollingAlerts(prev => {
+                            const newSet = new Set(prev);
+                            newSet.delete(alertId);
+                            return newSet;
+                        });
+                    }
+                } catch (error) {
+                    console.error('Error polling status for alert:', alertId, error);
+                }
+            }
+        }, 3000); // Poll every 3 seconds
+        
+        return () => clearInterval(pollInterval);
+    }, [pollingAlerts]);
+
+    // Handle investigation button click
+    const handleInvestigate = async (alert) => {
+        const alertId = alert.correlation_key;
+        const uniqueId = alert._uniqueId; // Use unique ID for tracking
+        
+        // Validate alert has correlation_key
+        if (!alertId || !uniqueId) {
+            console.error('Alert missing ID:', alert);
+            window.alert('Cannot investigate: Alert ID is missing');
+            return;
+        }
+        
+        // Prevent multiple clicks - check by uniqueId
+        if (investigationStatuses[uniqueId]) {
+            console.log('Investigation already in progress for:', uniqueId);
+            return;
+        }
+        
+        console.log('Starting investigation for unique ID:', uniqueId, 'correlation_key:', alertId);
+        console.log('Alert data:', alert);
+        
+        try {
+            // Mark as investigating immediately using uniqueId
+            setInvestigationStatuses(prev => ({
+                ...prev,
+                [uniqueId]: { status: 'investigating', userResponse: null }
+            }));
+            
+            // Start polling for this alert using uniqueId
+            setPollingAlerts(prev => new Set([...prev, uniqueId]));
+            
+            // Call backend to trigger n8n workflow (still use correlation_key for n8n)
+            const response = await fetch('http://localhost:4000/api/alerts/investigate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    alertId: uniqueId, // Send uniqueId to backend
+                    correlationKey: alertId, // Also send original key
+                    alertData: {
+                        user: alert.user,
+                        host: alert.host,
+                        ip: alert.ip,
+                        timestamp: alert.timestamp,
+                        name: alert.name,
+                        severity: alert.severity
+                    }
+                })
+            });
+            
+            console.log('Backend response status:', response.status);
+            
+            if (!response.ok) {
+                const text = await response.text();
+                console.error('Backend error response:', text);
+                throw new Error(`Backend returned ${response.status}: ${text.substring(0, 100)}`);
+            }
+            
+            const result = await response.json();
+            console.log('Backend result:', result);
+            
+            if (result.success) {
+                console.log('Investigation started successfully for:', alertId);
+            } else {
+                throw new Error(result.message || 'Failed to start investigation');
+            }
+        } catch (error) {
+            console.error('Error starting investigation:', error);
+            window.alert('Failed to start investigation: ' + error.message);
+            
+            // Revert status using uniqueId
+            setInvestigationStatuses(prev => {
+                const newStatuses = { ...prev };
+                delete newStatuses[uniqueId];
+                return newStatuses;
+            });
+            
+            setPollingAlerts(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(uniqueId);
+                return newSet;
+            });
+        }
+    };
+
+    // Handle escalation to SOC2
+    const handleEscalate = async (alert) => {
+        try {
+            // Fetch Analyst II users
+            const response = await fetch('/api/users/analyst-ii');
+            if (!response.ok) {
+                throw new Error('Failed to fetch Analyst II users');
+            }
+            
+            const analysts = await response.json();
+            
+            if (analysts.length === 0) {
+                window.alert('No Analyst II users available for escalation');
+                return;
+            }
+            
+            // Show modal
+            setEscalatingAlert(alert);
+            setAnalystIIList(analysts);
+            setSelectedAnalyst('');
+            setEscalationReason(alert.investigationStatus?.userResponse === 'no' ? 
+                'User denied login attempt - potential security breach' : 
+                'Manual escalation required for further investigation');
+            setShowEscalationModal(true);
+        } catch (error) {
+            console.error('Error preparing escalation:', error);
+            window.alert('Failed to load analysts: ' + error.message);
+        }
+    };
+
+    // Submit escalation
+    const submitEscalation = async () => {
+        if (!selectedAnalyst) {
+            window.alert('Please select an Analyst II to escalate to');
+            return;
+        }
+        
+        const analyst = analystIIList.find(a => a.uid === selectedAnalyst);
+        if (!analyst) return;
+        
+        const alert = escalatingAlert;
+        const uniqueId = alert._uniqueId;
+        
+        try {
+            console.log('Escalating alert:', uniqueId, 'to:', analyst.name);
+            
+            const response = await fetch('/api/alerts/escalate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    alertId: uniqueId,
+                    alertData: {
+                        user: alert.user,
+                        host: alert.host,
+                        ip: alert.ip,
+                        timestamp: alert.timestamp,
+                        name: alert.name,
+                        severity: alert.severity
+                    },
+                    reason: escalationReason || 'Manual escalation',
+                    escalatedBy: auth.currentUser?.email || 'Unknown',
+                    assignedTo: analyst
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Escalation failed: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            console.log('Escalation result:', result);
+            
+            // Update local state
+            setInvestigationStatuses(prev => ({
+                ...prev,
+                [uniqueId]: {
+                    ...prev[uniqueId],
+                    escalated: true,
+                    escalatedTo: 'analyst_ii',
+                    assignedToName: analyst.name,
+                    assignedToEmail: analyst.email,
+                    escalatedAt: new Date().toISOString()
+                }
+            }));
+            
+            setShowEscalationModal(false);
+            setEscalatingAlert(null);
+            window.alert(`Alert escalated to ${analyst.name} successfully!`);
+        } catch (error) {
+            console.error('Error escalating alert:', error);
+            window.alert('Failed to escalate alert: ' + error.message);
+        }
+    };
 
     // Handle initial assignment (Admin only)
     const handleInitialAssignment = async () => {
@@ -304,6 +605,9 @@ function Alerts({ darkMode, setDarkMode }) {
                                             Assigned To
                                         </th>
                                     )}
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                        Investigation
+                                    </th>
                                     <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                         Actions
                                     </th>
@@ -312,19 +616,38 @@ function Alerts({ darkMode, setDarkMode }) {
                             <tbody>
                                 {loading ? (
                                     <tr>
-                                        <td colSpan={role === 'admin' ? 8 : 7} className="text-center py-8">Loading...</td>
+                                        <td colSpan={role === 'admin' ? 9 : 8} className="text-center py-8">Loading...</td>
                                     </tr>
                                 ) : paginatedAlerts.length === 0 ? (
                                     <tr>
-                                        <td colSpan={role === 'admin' ? 8 : 7} className="text-center py-8 text-gray-400">
+                                        <td colSpan={role === 'admin' ? 9 : 8} className="text-center py-8 text-gray-400">
                                             No alerts found.
                                         </td>
                                     </tr>
                                 ) : (
-                                    paginatedAlerts.map((alert, idx) => (
+                                    paginatedAlerts.map((alert, idx) => {
+                                        // Use _uniqueId for investigation status tracking
+                                        const uniqueRowId = alert._uniqueId || `row-${idx}`;
+                                        const investigationStatus = investigationStatuses[uniqueRowId];
+                                        
+                                        // Determine row background color - ONLY this specific row
+                                        let rowClass = "hover:bg-gray-50 dark:hover:bg-gray-900 transition cursor-pointer";
+                                        if (investigationStatus) {
+                                            if (investigationStatus.status === 'investigating') {
+                                                rowClass = "bg-yellow-100 dark:bg-yellow-900/30 hover:bg-yellow-200 dark:hover:bg-yellow-900/50 transition";
+                                            } else if (investigationStatus.status === 'responded') {
+                                                if (investigationStatus.userResponse === 'yes') {
+                                                    rowClass = "bg-green-100 dark:bg-green-900/30 hover:bg-green-200 dark:hover:bg-green-900/50 transition";
+                                                } else if (investigationStatus.userResponse === 'no') {
+                                                    rowClass = "bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 transition";
+                                                }
+                                            }
+                                        }
+                                        
+                                        return (
                                         <tr
-                                            key={idx + (currentPage - 1) * rowsPerPage}
-                                            className="hover:bg-gray-50 dark:hover:bg-gray-900 transition cursor-pointer"
+                                            key={uniqueRowId}
+                                            className={rowClass}
                                         >
                                             <td className="px-4 py-3 font-medium">{alert.name}</td>
                                             <td className="px-4 py-3">{alert.ip}</td>
@@ -365,6 +688,59 @@ function Alerts({ darkMode, setDarkMode }) {
                                                     )}
                                                 </td>
                                             )}
+                                            <td className="px-4 py-3">
+                                                {investigationStatus ? (
+                                                    investigationStatus.status === 'investigating' ? (
+                                                        <div className="flex items-center gap-2 text-xs">
+                                                            <svg className="w-4 h-4 text-yellow-600 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                            </svg>
+                                                            <span className="text-yellow-700 dark:text-yellow-400 font-medium">Investigating...</span>
+                                                        </div>
+                                                    ) : investigationStatus.userResponse === 'yes' ? (
+                                                        <div className="flex flex-col gap-1">
+                                                            <div className="text-xs font-semibold text-green-700 dark:text-green-400">
+                                                                ✓ User confirmed: YES
+                                                            </div>
+                                                            {!investigationStatus.escalated && (
+                                                                <button
+                                                                    onClick={() => handleEscalate(alert)}
+                                                                    className="text-xs px-2 py-1 bg-orange-500 hover:bg-orange-600 text-white rounded transition-colors"
+                                                                >
+                                                                    Escalate to Analyst II
+                                                                </button>
+                                                            )}
+                                                            {investigationStatus.escalated && (
+                                                                <div className="text-xs font-medium text-orange-600 dark:text-orange-400">
+                                                                    Assigned to: {investigationStatus.assignedToName || 'Analyst II'}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ) : investigationStatus.userResponse === 'no' ? (
+                                                        <div className="flex flex-col gap-1">
+                                                            <div className="text-xs font-semibold text-red-700 dark:text-red-400">
+                                                                ✗ User denied: NO
+                                                            </div>
+                                                            {!investigationStatus.escalated && (
+                                                                <button
+                                                                    onClick={() => handleEscalate(alert)}
+                                                                    className="text-xs px-2 py-1 bg-red-500 hover:bg-red-600 text-white rounded transition-colors"
+                                                                >
+                                                                    Escalate to Analyst II
+                                                                </button>
+                                                            )}
+                                                            {investigationStatus.escalated && (
+                                                                <div className="text-xs font-medium text-orange-600 dark:text-orange-400">
+                                                                    Assigned to: {investigationStatus.assignedToName || 'Analyst II'}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ) : null
+                                                ) : (
+                                                    <span className="text-gray-400 text-xs">-</span>
+                                                )}
+                                            </td>
                                             <td className="px-4 py-3 text-center">
                                                 <button
                                                     className="p-2 rounded hover:bg-blue-100 dark:hover:bg-blue-900"
@@ -379,7 +755,7 @@ function Alerts({ darkMode, setDarkMode }) {
                                                 </button>
                                             </td>
                                         </tr>
-                                    ))
+                                    )})
                                 )}
                             </tbody>
                         </table>
@@ -720,16 +1096,138 @@ function Alerts({ darkMode, setDarkMode }) {
 
                                     {/* Investigate Button */}
                                     <div className="flex justify-end">
-                                        <button
-                                            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-lg shadow transition-all duration-150 flex items-center gap-2"
-                                            onClick={() => alert('Investigate action!')}
-                                        >
-                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V4a2 2 0 10-4 0v1.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                                            </svg>
-                                            Investigate
-                                        </button>
+                                        {investigationStatuses[selectedAlert.correlation_key] ? (
+                                            <div className="text-sm">
+                                                {investigationStatuses[selectedAlert.correlation_key].status === 'investigating' ? (
+                                                    <div className="flex items-center gap-2 text-yellow-700 dark:text-yellow-400">
+                                                        <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                        </svg>
+                                                        <span className="font-semibold">Awaiting user response...</span>
+                                                    </div>
+                                                ) : investigationStatuses[selectedAlert.correlation_key].userResponse === 'yes' ? (
+                                                    <div className="bg-green-100 dark:bg-green-900/30 border border-green-400 dark:border-green-600 text-green-800 dark:text-green-200 px-4 py-3 rounded">
+                                                        <strong>✓ User responded: YES</strong> - They have confirmed this login.
+                                                    </div>
+                                                ) : investigationStatuses[selectedAlert.correlation_key].userResponse === 'no' ? (
+                                                    <div className="bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-600 text-red-800 dark:text-red-200 px-4 py-3 rounded">
+                                                        <strong>✗ User responded: NO</strong> - They have denied this login activity.
+                                                    </div>
+                                                ) : null}
+                                            </div>
+                                        ) : (
+                                            <button
+                                                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-lg shadow transition-all duration-150 flex items-center gap-2"
+                                                onClick={() => {
+                                                    handleInvestigate(selectedAlert);
+                                                    setSelectedAlert(null);
+                                                }}
+                                            >
+                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V4a2 2 0 10-4 0v1.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                                                </svg>
+                                                Investigate
+                                            </button>
+                                        )}
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Escalation Modal */}
+                    {showEscalationModal && (
+                        <div 
+                            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+                            onClick={() => setShowEscalationModal(false)}
+                        >
+                            <div 
+                                className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                                        ⚠️ Escalate Alert to Analyst II
+                                    </h3>
+                                    <button
+                                        onClick={() => setShowEscalationModal(false)}
+                                        className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                                    >
+                                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
+                                </div>
+                                
+                                {escalatingAlert && (
+                                    <div className="mb-4 p-3 bg-gray-100 dark:bg-gray-700 rounded">
+                                        <p className="text-sm text-gray-700 dark:text-gray-300">
+                                            <strong>Alert:</strong> {escalatingAlert.name}
+                                        </p>
+                                        <p className="text-sm text-gray-700 dark:text-gray-300">
+                                            <strong>User:</strong> {escalatingAlert.user || 'Unknown'}
+                                        </p>
+                                        <p className="text-sm text-gray-700 dark:text-gray-300">
+                                            <strong>Host:</strong> {escalatingAlert.host || escalatingAlert.ip}
+                                        </p>
+                                    </div>
+                                )}
+
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                            Assign to Analyst II: *
+                                        </label>
+                                        <select
+                                            value={selectedAnalyst}
+                                            onChange={(e) => setSelectedAnalyst(e.target.value)}
+                                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
+                                        >
+                                            <option value="">-- Select Analyst --</option>
+                                            {analystIIList.map((analyst) => (
+                                                <option key={analyst.uid} value={analyst.uid}>
+                                                    {analyst.name} ({analyst.email})
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                            Escalation Reason:
+                                        </label>
+                                        <textarea
+                                            value={escalationReason}
+                                            onChange={(e) => setEscalationReason(e.target.value)}
+                                            rows={3}
+                                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
+                                            placeholder="Why is this alert being escalated?"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-3 mt-6">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowEscalationModal(false)}
+                                        className="flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-800 dark:text-gray-200 rounded-lg font-medium transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={submitEscalation}
+                                        disabled={!selectedAnalyst}
+                                        style={{
+                                            backgroundColor: selectedAnalyst ? '#f97316' : '#d1d5db',
+                                            color: selectedAnalyst ? '#ffffff' : '#6b7280',
+                                            cursor: selectedAnalyst ? 'pointer' : 'not-allowed'
+                                        }}
+                                        className="flex-1 px-4 py-2 rounded-lg font-medium transition-colors"
+                                    >
+                                        {selectedAnalyst ? 'Escalate' : 'Select Analyst First'}
+                                    </button>
                                 </div>
                             </div>
                         </div>
