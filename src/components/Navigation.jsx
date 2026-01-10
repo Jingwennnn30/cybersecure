@@ -18,7 +18,7 @@ import { doc, getDoc } from 'firebase/firestore';
 const navigation = [
   {
     name: 'Dashboard',
-    href: '/',
+    href: '/dashboard',
     icon: HomeIcon,
     description: 'Overview and key metrics'
   },

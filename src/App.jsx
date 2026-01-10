@@ -62,13 +62,30 @@ function App() {
     }
   }, [darkMode]);
 
+  const [user, loading] = useAuthState(auth);
+
+  // Redirect authenticated users from login/signup to dashboard
+  const PublicRoute = ({ children }) => {
+    if (loading) return <div>Loading...</div>;
+    return user ? <Navigate to="/dashboard" /> : children;
+  };
+
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route path="/signup" element={<Signup />} />
-      <Route path="/forgot" element={<ForgotPassword />} />
+      <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+      <Route path="/signup" element={<PublicRoute><Signup /></PublicRoute>} />
+      <Route path="/forgot" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
+      
+      {/* Root path redirects to dashboard or login based on auth status */}
       <Route
         path="/"
+        element={
+          user ? <Navigate to="/dashboard" /> : <Navigate to="/login" />
+        }
+      />
+      
+      <Route
+        path="/dashboard"
         element={
           <PrivateRoute>
             <Dashboard darkMode={darkMode} setDarkMode={setDarkMode} />
@@ -132,8 +149,11 @@ function App() {
           </PrivateRoute>
         }
       />
-      {/* Redirect any unknown route to login */}
-      <Route path="*" element={<Navigate to="/login" />} />
+      {/* Redirect any unknown route based on authentication status */}
+      <Route 
+        path="*" 
+        element={user ? <Navigate to="/dashboard" /> : <Navigate to="/login" />} 
+      />
     </Routes>
   );
 }
