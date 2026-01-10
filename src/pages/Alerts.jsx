@@ -578,37 +578,44 @@ function Alerts({ darkMode, setDarkMode }) {
                         </button>
                     </div>
                     {/* Alerts Table */}
-                    <div className="overflow-x-auto bg-white dark:bg-gray-800 rounded-lg shadow">
-                        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                            <thead>
+                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+                        <table className="w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm table-fixed">
+                            <colgroup>
+                                <col style={{width: '20%'}} />
+                                <col style={{width: '10%'}} />
+                                <col style={{width: '8%'}} />
+                                <col style={{width: '6%'}} />
+                                <col style={{width: '13%'}} />
+                                {role === 'admin' && <col style={{width: '12%'}} />}
+                                <col style={{width: '17%'}} />
+                                <col style={{width: '10%'}} />
+                            </colgroup>
+                            <thead className="bg-gray-50 dark:bg-gray-900">
                                 <tr>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
                                         Alert Name
                                     </th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
                                         IP
                                     </th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                        Port
-                                    </th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
                                         Severity
                                     </th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                        Risk Score
+                                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
+                                        Risk
                                     </th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
                                         Timestamp
                                     </th>
                                     {role === 'admin' && (
-                                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                            Assigned To
+                                        <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
+                                            Assigned
                                         </th>
                                     )}
-                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
                                         Investigation
                                     </th>
-                                    <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                    <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
                                         Actions
                                     </th>
                                 </tr>
@@ -616,11 +623,11 @@ function Alerts({ darkMode, setDarkMode }) {
                             <tbody>
                                 {loading ? (
                                     <tr>
-                                        <td colSpan={role === 'admin' ? 9 : 8} className="text-center py-8">Loading...</td>
+                                        <td colSpan={role === 'admin' ? 8 : 7} className="text-center py-8">Loading...</td>
                                     </tr>
                                 ) : paginatedAlerts.length === 0 ? (
                                     <tr>
-                                        <td colSpan={role === 'admin' ? 9 : 8} className="text-center py-8 text-gray-400">
+                                        <td colSpan={role === 'admin' ? 8 : 7} className="text-center py-8 text-gray-400">
                                             No alerts found.
                                         </td>
                                     </tr>
@@ -649,10 +656,9 @@ function Alerts({ darkMode, setDarkMode }) {
                                             key={uniqueRowId}
                                             className={rowClass}
                                         >
-                                            <td className="px-4 py-3 font-medium">{alert.name}</td>
-                                            <td className="px-4 py-3">{alert.ip}</td>
-                                            <td className="px-4 py-3">{alert.port}</td>
-                                            <td className="px-4 py-3">
+                                            <td className="px-3 py-2 font-medium text-xs">{alert.name}</td>
+                                            <td className="px-3 py-2 text-xs">{alert.ip}</td>
+                                            <td className="px-3 py-2">
                                                 <span
                                                     className={`px-2 py-1 rounded text-xs font-semibold ${alert.severity === "critical"
                                                         ? "bg-red-600 text-white"
@@ -666,14 +672,14 @@ function Alerts({ darkMode, setDarkMode }) {
                                                     {alert.severity}
                                                 </span>
                                             </td>
-                                            <td className="px-4 py-3">{alert.risk_score}</td>
-                                            <td className="px-4 py-3">
+                                            <td className="px-3 py-2 text-xs">{alert.risk_score}</td>
+                                            <td className="px-3 py-2 text-xs">
                                                 {alert.timestamp
                                                     ? new Date(alert.timestamp).toLocaleString()
                                                     : ""}
                                             </td>
                                             {role === 'admin' && (
-                                                <td className="px-4 py-3">
+                                                <td className="px-3 py-2">
                                                     {alert.assignment ? (
                                                         <div className="text-xs">
                                                             <div className="font-semibold">{alert.assignment.assignedToName}</div>
@@ -688,7 +694,7 @@ function Alerts({ darkMode, setDarkMode }) {
                                                     )}
                                                 </td>
                                             )}
-                                            <td className="px-4 py-3">
+                                            <td className="px-3 py-2">
                                                 {investigationStatus ? (
                                                     investigationStatus.status === 'investigating' ? (
                                                         <div className="flex items-center gap-2 text-xs">
@@ -741,7 +747,7 @@ function Alerts({ darkMode, setDarkMode }) {
                                                     <span className="text-gray-400 text-xs">-</span>
                                                 )}
                                             </td>
-                                            <td className="px-4 py-3 text-center">
+                                            <td className="px-3 py-2 text-center">
                                                 <button
                                                     className="p-2 rounded hover:bg-blue-100 dark:hover:bg-blue-900"
                                                     onClick={() => setSelectedAlert(alert)}

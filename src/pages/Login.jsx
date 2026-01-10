@@ -52,7 +52,7 @@ export default function Login() {
             }
 
             // 3. Otherwise, allow login
-            navigate("/");
+            navigate("/dashboard");
         } catch (err) {
             console.error('Login error:', err);
             
@@ -126,7 +126,7 @@ export default function Login() {
                 }
             }
 
-            navigate("/");
+            navigate("/dashboard");
         } catch (err) {
             console.error('Google sign-in error:', err);
             
