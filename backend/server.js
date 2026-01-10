@@ -1211,6 +1211,28 @@ app.get('/api/alerts/:alertId/status', async (req, res) => {
   }
 });
 
+// New endpoint: Get investigation status by uniqueId (for Historical Alerts)
+app.get('/api/investigation-status/:uniqueId', async (req, res) => {
+  try {
+    const uniqueId = decodeURIComponent(req.params.uniqueId);
+    
+    // Get status from Firestore
+    const doc = await db.collection('investigation_statuses').doc(uniqueId).get();
+    
+    if (!doc.exists) {
+      return res.json({ status: 'none', userResponse: null });
+    }
+    
+    res.json(doc.data());
+  } catch (error) {
+    console.error('Error getting investigation status:', error);
+    res.status(500).json({ 
+      error: 'Failed to get status', 
+      message: error.message 
+    });
+  }
+});
+
 // Endpoint: Get all investigation statuses (batch)
 app.get('/api/alerts/statuses/all', async (req, res) => {
   try {

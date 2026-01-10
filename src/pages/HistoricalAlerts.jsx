@@ -28,6 +28,7 @@ function HistoricalAlerts({ darkMode, setDarkMode }) {
     const [alertsPerPage] = useState(10);
     const [alerts, setAlerts] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [investigationStatuses, setInvestigationStatuses] = useState({});
 
     // Fetch alerts from the backend
     useEffect(() => {
@@ -37,15 +38,35 @@ function HistoricalAlerts({ darkMode, setDarkMode }) {
                 if (response.ok) {
                     const data = await response.json();
                     setAlerts(data);
+                    // Load investigation statuses in batch
+                    await loadInvestigationStatuses(data);
                 }
             } catch (error) {
                 console.error('Error fetching alerts:', error);
+            } finally {
+                setLoading(false);
             }
-            setLoading(false);
         };
 
         fetchAlerts();
+
+        // Poll for updates every 10 seconds
+        const interval = setInterval(fetchAlerts, 10000);
+        return () => clearInterval(interval);
     }, []);
+
+    // Load investigation statuses from backend (batch)
+    const loadInvestigationStatuses = async (alertsList) => {
+        try {
+            const response = await fetch('/api/alerts/statuses/all');
+            if (response.ok) {
+                const statuses = await response.json();
+                setInvestigationStatuses(statuses);
+            }
+        } catch (error) {
+            console.error('Error loading investigation statuses:', error);
+        }
+    };
 
     // Get current alerts for pagination
     const indexOfLastAlert = currentPage * alertsPerPage;
@@ -140,16 +161,41 @@ function HistoricalAlerts({ darkMode, setDarkMode }) {
                                         </TableRow>
                                     </TableHead>
                                     <TableBody>
-                                        {currentAlerts.map((alert, index) => (
+                                        {currentAlerts.map((alert, index) => {
+                                            // Create uniqueId same way as Alerts page
+                                            const uniqueId = `${alert.correlation_key}-${alert.timestamp}-${index}`;
+                                            const investigationStatus = investigationStatuses[uniqueId];
+                                            
+                                            // Determine status based on investigation state
+                                            let displayStatus = 'Open';
+                                            let statusColor = 'gray';
+                                            
+                                            if (investigationStatus) {
+                                                if (investigationStatus.escalated) {
+                                                    displayStatus = 'Escalated';
+                                                    statusColor = 'orange';
+                                                } else if (investigationStatus.status === 'investigating') {
+                                                    displayStatus = 'In Progress';
+                                                    statusColor = 'yellow';
+                                                } else if (investigationStatus.userResponse === 'yes') {
+                                                    displayStatus = 'Confirmed';
+                                                    statusColor = 'emerald';
+                                                } else if (investigationStatus.userResponse === 'no') {
+                                                    displayStatus = 'False Positive';
+                                                    statusColor = 'red';
+                                                }
+                                            }
+                                            
+                                            return (
                                             <TableRow key={`${alert.timestamp}-${alert.ip}-${index}`} className="border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition">
                                                 <TableCell className="text-gray-700 dark:text-gray-200">{alert.timestamp}</TableCell>
                                                 <TableCell className="text-gray-700 dark:text-gray-200">{alert.name || alert.type || 'Unknown'}</TableCell>
                                                 <TableCell>
                                                     <Badge
                                                         color={
-                                                            alert.severity === 'Critical'
+                                                            alert.severity === 'Critical' || alert.severity === 'critical'
                                                                 ? 'rose'
-                                                                : alert.severity === 'High'
+                                                                : alert.severity === 'High' || alert.severity === 'high'
                                                                     ? 'amber'
                                                                     : 'gray'
                                                         }
@@ -158,24 +204,16 @@ function HistoricalAlerts({ darkMode, setDarkMode }) {
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell>
-                                                    <Badge
-                                                        color={
-                                                            alert.status === 'Resolved'
-                                                                ? 'emerald'
-                                                                : alert.status === 'Investigating'
-                                                                    ? 'amber'
-                                                                    : 'gray'
-                                                        }
-                                                    >
-                                                        {alert.status || 'Open'}
+                                                    <Badge color={statusColor}>
+                                                        {displayStatus}
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell className="text-gray-700 dark:text-gray-200">{alert.ip || alert.source || 'N/A'}</TableCell>
                                             </TableRow>
-                                        ))}
+                                        )})}
                                     </TableBody>
                                 </Table>
-                                <div className="flex justify-center items-center gap-2 mt-4">
+                                <div className="flex justify-center items-center gap-2 mt-6">
                                     <Button
                                         size="xs"
                                         onClick={() => paginate(currentPage - 1)}
@@ -185,17 +223,66 @@ function HistoricalAlerts({ darkMode, setDarkMode }) {
                                     >
                                         Previous
                                     </Button>
-                                    {[...Array(totalPages)].map((_, index) => (
-                                        <Button
-                                            key={index + 1}
-                                            size="xs"
-                                            variant={currentPage === index + 1 ? "primary" : "secondary"}
-                                            onClick={() => paginate(index + 1)}
-                                            className="px-3 py-1"
-                                        >
-                                            {index + 1}
-                                        </Button>
-                                    ))}
+                                    
+                                    {/* First page */}
+                                    {currentPage > 3 && (
+                                        <>
+                                            <Button
+                                                size="xs"
+                                                variant="secondary"
+                                                onClick={() => paginate(1)}
+                                                className="px-3 py-1"
+                                            >
+                                                1
+                                            </Button>
+                                            {currentPage > 4 && (
+                                                <span className="px-2 text-gray-500 dark:text-gray-400">...</span>
+                                            )}
+                                        </>
+                                    )}
+
+                                    {/* Page numbers around current page */}
+                                    {[...Array(totalPages)].map((_, index) => {
+                                        const pageNum = index + 1;
+                                        if (
+                                            pageNum === currentPage ||
+                                            pageNum === currentPage - 1 ||
+                                            pageNum === currentPage + 1 ||
+                                            pageNum === currentPage - 2 ||
+                                            pageNum === currentPage + 2
+                                        ) {
+                                            return (
+                                                <Button
+                                                    key={pageNum}
+                                                    size="xs"
+                                                    variant={currentPage === pageNum ? "primary" : "secondary"}
+                                                    onClick={() => paginate(pageNum)}
+                                                    className="px-3 py-1"
+                                                >
+                                                    {pageNum}
+                                                </Button>
+                                            );
+                                        }
+                                        return null;
+                                    })}
+
+                                    {/* Last page */}
+                                    {currentPage < totalPages - 2 && (
+                                        <>
+                                            {currentPage < totalPages - 3 && (
+                                                <span className="px-2 text-gray-500 dark:text-gray-400">...</span>
+                                            )}
+                                            <Button
+                                                size="xs"
+                                                variant="secondary"
+                                                onClick={() => paginate(totalPages)}
+                                                className="px-3 py-1"
+                                            >
+                                                {totalPages}
+                                            </Button>
+                                        </>
+                                    )}
+
                                     <Button
                                         size="xs"
                                         onClick={() => paginate(currentPage + 1)}
@@ -205,6 +292,10 @@ function HistoricalAlerts({ darkMode, setDarkMode }) {
                                     >
                                         Next
                                     </Button>
+                                    
+                                    <span className="ml-4 text-sm text-gray-600 dark:text-gray-400">
+                                        Page {currentPage} of {totalPages}
+                                    </span>
                                 </div>
                             </>
                         )}
