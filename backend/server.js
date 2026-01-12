@@ -1003,33 +1003,28 @@ app.get('/api/ai-insights', async (req, res) => {
     });
     const likelihoodDist = await likelihoodQuery.json();
 
-    // Categorize threats by analyzing AI summaries
+    // Get total category counts for the 3 main alert types
     const categoryQuery = await client.query({
       query: `
         SELECT 
           CASE
-            WHEN lower(ai_summary) LIKE '%network%' OR lower(ai_summary) LIKE '%ddos%' 
-                 OR lower(ai_summary) LIKE '%scan%' OR lower(ai_summary) LIKE '%traffic%' 
-                 OR lower(ai_summary) LIKE '%dns%' OR lower(ai_summary) LIKE '%port%' THEN 'Network'
-            WHEN lower(ai_summary) LIKE '%application%' OR lower(ai_summary) LIKE '%web%' 
-                 OR lower(ai_summary) LIKE '%sql%' OR lower(ai_summary) LIKE '%injection%' THEN 'Application'
-            WHEN lower(ai_summary) LIKE '%user%' OR lower(ai_summary) LIKE '%login%' 
-                 OR lower(ai_summary) LIKE '%auth%' OR lower(ai_summary) LIKE '%access%' 
-                 OR lower(ai_summary) LIKE '%credential%' THEN 'User'
-            WHEN lower(ai_summary) LIKE '%system%' OR lower(ai_summary) LIKE '%backdoor%' 
-                 OR lower(ai_summary) LIKE '%malware%' OR lower(ai_summary) LIKE '%execution%' 
-                 OR lower(ai_summary) LIKE '%command%' THEN 'System'
-            ELSE 'Other'
+            WHEN correlation_key LIKE 'multiple_l%' THEN 'Multiple Logon Failure'
+            WHEN correlation_key LIKE 'xz_%' THEN 'XZ Backdoor'
+            WHEN correlation_key LIKE 'dns_botnet%' THEN 'DNS Botnet'
           END as category,
-          count() as threats,
-          countIf(ai_priority = 'low') as mitigated
-        FROM ai_analysis
-        WHERE ai_summary != ''
+          count() as total
+        FROM alert_ai_analysis
+        WHERE (correlation_key LIKE 'multiple_l%' OR correlation_key LIKE 'xz_%' OR correlation_key LIKE 'dns_botnet%')
+          AND correlation_key != ''
+          AND correlation_key IS NOT NULL
         GROUP BY category
+        ORDER BY total DESC
       `,
       format: 'JSONEachRow'
     });
-    const categoryData = await categoryQuery.json();
+    const categoryDataArray = await categoryQuery.json();
+    
+    console.log('Category data:', categoryDataArray);
 
     // Get threat type distribution based on summaries and patterns
     const threatTypeQuery = await client.query({
@@ -1072,7 +1067,7 @@ app.get('/api/ai-insights', async (req, res) => {
       analyses,
       priorityDistribution: priorityDist,
       likelihoodDistribution: likelihoodDist,
-      categoryData,
+      categoryData: categoryDataArray,
       threatTypeData
     });
   } catch (err) {
@@ -1083,6 +1078,89 @@ app.get('/api/ai-insights', async (req, res) => {
       likelihoodDistribution: [],
       categoryData: [],
       threatTypeData: []
+    });
+  }
+});
+
+// New endpoint: Get categorized AI recommendations by alert category
+app.get('/api/ai-recommendations', async (req, res) => {
+  try {
+    console.log('Fetching categorized AI recommendations from ClickHouse...');
+    
+    // Define the 3 main categories based on correlation_key patterns
+    const categories = {
+      'multiple_logon_failure': 'multiple_l%',
+      'xz_backdoor_execution': 'xz_%',
+      'dns_botnet_c2': 'dns_botnet%'
+    };
+    
+    const categorizedRecommendations = {};
+    
+    // Fetch recommendations for each of the 3 main categories
+    for (const [categoryName, pattern] of Object.entries(categories)) {
+      try {
+        // Query alert_ai_analysis table, filtering from row 104 onwards (where correlation_key is not empty)
+        const query = await client.query({
+          query: `
+            SELECT 
+              correlation_key,
+              alert_category,
+              MAX(event_time) as latest_event_time,
+              MAX(first_seen) as first_seen,
+              MAX(last_seen) as last_seen,
+              MAX(severity) as severity,
+              MAX(priority) as priority,
+              MAX(likelihood) as likelihood,
+              MAX(summary) as summary,
+              MAX(risk_justification) as risk_justification,
+              MAX(suggestion) as suggestion,
+              MAX(explanation) as explanation,
+              MAX(recommended_checks) as recommended_checks,
+              COUNT(*) as occurrence_count
+            FROM alert_ai_analysis
+            WHERE correlation_key LIKE '${pattern}'
+              AND correlation_key != ''
+              AND correlation_key IS NOT NULL
+            GROUP BY correlation_key, alert_category
+            ORDER BY latest_event_time DESC
+            LIMIT 20
+          `,
+          format: 'JSONEachRow'
+        });
+        
+        const results = await query.json();
+        
+        categorizedRecommendations[categoryName] = results.map(item => ({
+          correlationKey: item.correlation_key,
+          category: item.alert_category,
+          latestEventTime: item.latest_event_time,
+          firstSeen: item.first_seen,
+          lastSeen: item.last_seen,
+          severity: item.severity,
+          priority: item.priority,
+          likelihood: item.likelihood,
+          summary: item.summary,
+          riskJustification: item.risk_justification,
+          suggestion: item.suggestion,
+          explanation: item.explanation,
+          recommendedChecks: item.recommended_checks,
+          occurrenceCount: item.occurrence_count
+        }));
+        
+        console.log(`Fetched ${results.length} recommendations for: ${categoryName}`);
+      } catch (categoryError) {
+        console.error(`Error fetching ${categoryName}:`, categoryError.message);
+        categorizedRecommendations[categoryName] = [];
+      }
+    }
+    
+    console.log('Categorized AI recommendations fetched successfully');
+    res.json(categorizedRecommendations);
+  } catch (err) {
+    console.error('Error in /api/ai-recommendations:', err);
+    res.status(500).json({
+      error: 'Failed to fetch AI recommendations',
+      message: err.message
     });
   }
 });
