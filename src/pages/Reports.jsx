@@ -34,7 +34,7 @@ function Reports({ darkMode, setDarkMode }) {
             };
 
             // Call backend proxy endpoint to avoid CORS issues
-            const response = await fetch('/api/generate-report', {
+            const response = await fetch('http://localhost:4000/api/generate-report', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
