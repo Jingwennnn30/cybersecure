@@ -1146,7 +1146,12 @@ app.get('/api/ai-recommendations', async (req, res) => {
           riskJustification: 'Based on correlation analysis',
           suggestion: 'Investigate further',
           explanation: 'Alert detected through correlation rules',
-          recommendedChecks: 'Check system logs and verify activity'
+          recommendedChecks: [
+            'Check system logs for suspicious activity',
+            'Verify user authentication attempts',
+            'Review network traffic patterns',
+            'Inspect affected system resources'
+          ]
         }));
         
         console.log(`Fetched ${results.length} recommendations for: ${categoryName}`);
