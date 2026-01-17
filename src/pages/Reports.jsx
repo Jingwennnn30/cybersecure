@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Card, Title, Text } from '@tremor/react';
 import Navigation from '../components/Navigation';
+import { API_BASE_URL } from '../config';
 
 function Reports({ darkMode, setDarkMode }) {
     const [startDate, setStartDate] = useState('');
@@ -34,7 +35,7 @@ function Reports({ darkMode, setDarkMode }) {
             };
 
             // Call backend proxy endpoint to avoid CORS issues
-            const response = await fetch('http://localhost:4000/api/generate-report', {
+            const response = await fetch(`${API_BASE_URL}/api/generate-report`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
