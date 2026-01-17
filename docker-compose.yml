@@ -16,3 +16,10 @@ services:
       - ./backend/.env
     container_name: backend-app
     restart: unless-stopped
+
+  telegram-bot:
+    build: ./my-telegram-bot
+    ports:
+      - "3000:3000"
+    container_name: telegram-bot
+    restart: unless-stopped
