@@ -960,15 +960,15 @@ app.get('/api/ai-insights', async (req, res) => {
     const analysesQuery = await client.query({
       query: `
         SELECT 
-          alert_id,
-          ai_summary,
-          ai_priority,
-          ai_likelihood,
-          ai_suggestion,
-          ai_explanation,
-          ai_recommended_checks
-        FROM ai_analysis
-        ORDER BY alert_id DESC
+          correlation_key as alert_id,
+          alert_name as ai_summary,
+          risk_level as ai_priority,
+          severity as ai_likelihood,
+          alert_type as ai_suggestion,
+          kill_chain_phase as ai_explanation,
+          'Check system logs' as ai_recommended_checks
+        FROM alert_enriched_events
+        ORDER BY event_time DESC
         LIMIT 100
       `,
       format: 'JSONEachRow'
@@ -979,11 +979,11 @@ app.get('/api/ai-insights', async (req, res) => {
     const priorityQuery = await client.query({
       query: `
         SELECT 
-          ai_priority as priority,
+          risk_level as priority,
           count() as count
-        FROM ai_analysis
-        WHERE ai_priority != ''
-        GROUP BY ai_priority
+        FROM alert_enriched_events
+        WHERE risk_level != ''
+        GROUP BY risk_level
       `,
       format: 'JSONEachRow'
     });
@@ -993,11 +993,11 @@ app.get('/api/ai-insights', async (req, res) => {
     const likelihoodQuery = await client.query({
       query: `
         SELECT 
-          ai_likelihood as likelihood,
+          severity as likelihood,
           count() as count
-        FROM ai_analysis
-        WHERE ai_likelihood != ''
-        GROUP BY ai_likelihood
+        FROM alert_enriched_events
+        WHERE severity != ''
+        GROUP BY severity
       `,
       format: 'JSONEachRow'
     });
@@ -1013,7 +1013,7 @@ app.get('/api/ai-insights', async (req, res) => {
             WHEN correlation_key LIKE 'dns_botnet%' THEN 'DNS Botnet'
           END as category,
           count() as total
-        FROM alert_ai_analysis
+        FROM alert_enriched_events
         WHERE (correlation_key LIKE 'multiple_l%' OR correlation_key LIKE 'xz_%' OR correlation_key LIKE 'dns_botnet%')
           AND correlation_key != ''
           AND correlation_key IS NOT NULL
@@ -1031,23 +1031,25 @@ app.get('/api/ai-insights', async (req, res) => {
       query: `
         SELECT 
           CASE
-            WHEN lower(ai_summary) LIKE '%malware%' OR lower(ai_summary) LIKE '%virus%' THEN 'Malware'
-            WHEN lower(ai_summary) LIKE '%phishing%' OR lower(ai_summary) LIKE '%social%' THEN 'Phishing'
-            WHEN lower(ai_summary) LIKE '%ddos%' OR lower(ai_summary) LIKE '%denial%' THEN 'DDoS'
-            WHEN lower(ai_summary) LIKE '%breach%' OR lower(ai_summary) LIKE '%leak%' 
-                 OR lower(ai_summary) LIKE '%exfiltration%' THEN 'Data Breach'
-            WHEN lower(ai_summary) LIKE '%backdoor%' OR lower(ai_summary) LIKE '%trojan%' 
-                 OR lower(ai_summary) LIKE '%xz%' THEN 'Backdoor'
-            WHEN lower(ai_summary) LIKE '%injection%' OR lower(ai_summary) LIKE '%sql%' THEN 'Injection Attack'
-            WHEN lower(ai_summary) LIKE '%scan%' OR lower(ai_summary) LIKE '%probe%' 
-                 OR lower(ai_summary) LIKE '%reconnaissance%' THEN 'Network Scan'
-            WHEN lower(ai_summary) LIKE '%bot%' OR lower(ai_summary) LIKE '%c2%' 
-                 OR lower(ai_summary) LIKE '%command and control%' THEN 'Botnet'
+            WHEN lower(alert_name) LIKE '%malware%' OR lower(alert_name) LIKE '%virus%' THEN 'Malware'
+            WHEN lower(alert_name) LIKE '%phishing%' OR lower(alert_name) LIKE '%social%' THEN 'Phishing'
+            WHEN lower(alert_name) LIKE '%ddos%' OR lower(alert_name) LIKE '%denial%' THEN 'DDoS'
+            WHEN lower(alert_name) LIKE '%breach%' OR lower(alert_name) LIKE '%leak%' 
+                 OR lower(alert_name) LIKE '%exfiltration%' THEN 'Data Breach'
+            WHEN lower(alert_name) LIKE '%backdoor%' OR lower(alert_name) LIKE '%trojan%' 
+                 OR lower(alert_name) LIKE '%xz%' THEN 'Backdoor'
+            WHEN lower(alert_name) LIKE '%injection%' OR lower(alert_name) LIKE '%sql%' THEN 'Injection Attack'
+            WHEN lower(alert_name) LIKE '%scan%' OR lower(alert_name) LIKE '%probe%' 
+                 OR lower(alert_name) LIKE '%reconnaissance%' THEN 'Network Scan'
+            WHEN lower(alert_name) LIKE '%bot%' OR lower(alert_name) LIKE '%c2%' 
+                 OR lower(alert_name) LIKE '%command and control%' THEN 'Botnet'
+            WHEN lower(alert_type) LIKE '%auth%' OR lower(alert_name) LIKE '%logon%' 
+                 OR lower(alert_name) LIKE '%login%' THEN 'Authentication'
             ELSE 'Other'
           END as threat_type,
           count() as count
-        FROM ai_analysis
-        WHERE ai_summary != ''
+        FROM alert_enriched_events
+        WHERE alert_name != ''
         GROUP BY threat_type
         ORDER BY count DESC
       `,
@@ -1059,7 +1061,7 @@ app.get('/api/ai-insights', async (req, res) => {
       totalAnalyses: analyses.length,
       priorities: priorityDist.length,
       likelihoods: likelihoodDist.length,
-      categories: categoryData.length,
+      categories: categoryDataArray.length,
       threatTypes: threatTypeData.length
     });
 
@@ -1099,29 +1101,25 @@ app.get('/api/ai-recommendations', async (req, res) => {
     // Fetch recommendations for each of the 3 main categories
     for (const [categoryName, pattern] of Object.entries(categories)) {
       try {
-        // Query alert_ai_analysis table, filtering from row 104 onwards (where correlation_key is not empty)
+        // Query alert_enriched_events table
         const query = await client.query({
           query: `
             SELECT 
               correlation_key,
-              alert_category,
+              alert_type as alert_category,
               MAX(event_time) as latest_event_time,
-              MAX(first_seen) as first_seen,
-              MAX(last_seen) as last_seen,
+              MIN(event_time) as first_seen,
+              MAX(event_time) as last_seen,
               MAX(severity) as severity,
-              MAX(priority) as priority,
-              MAX(likelihood) as likelihood,
-              MAX(summary) as summary,
-              MAX(risk_justification) as risk_justification,
-              MAX(suggestion) as suggestion,
-              MAX(explanation) as explanation,
-              MAX(recommended_checks) as recommended_checks,
+              MAX(risk_score) as risk_score,
+              MAX(risk_level) as risk_level,
+              MAX(alert_name) as alert_name,
               COUNT(*) as occurrence_count
-            FROM alert_ai_analysis
+            FROM alert_enriched_events
             WHERE correlation_key LIKE '${pattern}'
               AND correlation_key != ''
               AND correlation_key IS NOT NULL
-            GROUP BY correlation_key, alert_category
+            GROUP BY correlation_key, alert_type
             ORDER BY latest_event_time DESC
             LIMIT 20
           `,
@@ -1137,14 +1135,18 @@ app.get('/api/ai-recommendations', async (req, res) => {
           firstSeen: item.first_seen,
           lastSeen: item.last_seen,
           severity: item.severity,
-          priority: item.priority,
-          likelihood: item.likelihood,
-          summary: item.summary,
-          riskJustification: item.risk_justification,
-          suggestion: item.suggestion,
-          explanation: item.explanation,
-          recommendedChecks: item.recommended_checks,
-          occurrenceCount: item.occurrence_count
+          riskScore: item.risk_score,
+          riskLevel: item.risk_level,
+          alertName: item.alert_name,
+          occurrenceCount: item.occurrence_count,
+          // These fields don't exist in alert_enriched_events, providing defaults
+          priority: 'N/A',
+          likelihood: 'N/A',
+          summary: item.alert_name || 'No summary available',
+          riskJustification: 'Based on correlation analysis',
+          suggestion: 'Investigate further',
+          explanation: 'Alert detected through correlation rules',
+          recommendedChecks: 'Check system logs and verify activity'
         }));
         
         console.log(`Fetched ${results.length} recommendations for: ${categoryName}`);
