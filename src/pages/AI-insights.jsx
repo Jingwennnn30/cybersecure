@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, Title, Text, Grid } from '@tremor/react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import Navigation from '../components/Navigation';
+import { API_BASE_URL } from '../config';
 
 function AIInsights({ darkMode, setDarkMode }) {
   const [insightData, setInsightData] = useState([]);
@@ -26,7 +27,7 @@ function AIInsights({ darkMode, setDarkMode }) {
 
   const fetchCategorizedRecommendations = async () => {
     try {
-      const response = await fetch('http://localhost:4000/api/ai-recommendations');
+      const response = await fetch(`${API_BASE_URL}/api/ai-recommendations`);
       
       if (!response.ok) {
         console.error('Failed to fetch recommendations:', response.status);
@@ -47,7 +48,7 @@ function AIInsights({ darkMode, setDarkMode }) {
 
   const fetchAIInsights = async () => {
     try {
-      const response = await fetch('http://localhost:4000/api/ai-insights');
+      const response = await fetch(`${API_BASE_URL}/api/ai-insights`);
       const data = await response.json();
 
       // Process category data for bar chart

@@ -211,7 +211,7 @@ function Alerts({ darkMode, setDarkMode }) {
         const pollInterval = setInterval(async () => {
             for (const alertId of pollingAlerts) {
                 try {
-                    const response = await fetch(`http://localhost:4000/api/alerts/${alertId}/status`);
+                    const response = await fetch(`${API_BASE_URL}/api/alerts/${alertId}/status`);
                     const statusData = await response.json();
                     
                     if (statusData.status === 'responded') {
@@ -268,7 +268,7 @@ function Alerts({ darkMode, setDarkMode }) {
             setPollingAlerts(prev => new Set([...prev, uniqueId]));
             
             // Call backend to trigger n8n workflow (still use correlation_key for n8n)
-            const response = await fetch('http://localhost:4000/api/alerts/investigate', {
+            const response = await fetch(`${API_BASE_URL}/api/alerts/investigate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
