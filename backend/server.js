@@ -46,6 +46,55 @@ const db = admin.firestore();
 // Store alerts in memory (for demo; use a DB for production)
 let liveAlerts = [];
 
+// ===== CACHING SYSTEM (1 HOUR) =====
+// Cache structure: { key: { data, timestamp } }
+const queryCache = new Map();
+const CACHE_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
+
+// Helper function to get cached data
+function getCachedData(cacheKey) {
+  const cached = queryCache.get(cacheKey);
+  if (!cached) return null;
+  
+  const now = Date.now();
+  const age = now - cached.timestamp;
+  
+  if (age > CACHE_DURATION) {
+    // Cache expired
+    queryCache.delete(cacheKey);
+    console.log(`🗑️ Cache expired for: ${cacheKey} (age: ${Math.round(age/1000)}s)`);
+    return null;
+  }
+  
+  console.log(`✓ Cache HIT for: ${cacheKey} (age: ${Math.round(age/1000)}s)`);
+  return cached.data;
+}
+
+// Helper function to set cached data
+function setCachedData(cacheKey, data) {
+  queryCache.set(cacheKey, {
+    data: data,
+    timestamp: Date.now()
+  });
+  console.log(`💾 Cached data for: ${cacheKey} (size: ${JSON.stringify(data).length} bytes)`);
+}
+
+// Clear old cache entries periodically (every minute)
+setInterval(() => {
+  const now = Date.now();
+  let clearedCount = 0;
+  for (const [key, value] of queryCache.entries()) {
+    if (now - value.timestamp > CACHE_DURATION) {
+      queryCache.delete(key);
+      clearedCount++;
+    }
+  }
+  if (clearedCount > 0) {
+    console.log(`🧹 Cleared ${clearedCount} expired cache entries`);
+  }
+}, 60000);
+// ===== END CACHING SYSTEM =====
+
 app.use(cors());
 app.use(express.json());
 // Also support URL-encoded bodies (some tools default to this)
@@ -271,6 +320,16 @@ app.get('/api/dashboard-stats', async (req, res) => {
   try {
     console.log('Fetching dashboard stats...');
     
+    // Check cache first
+    const cacheKey = 'dashboard_stats';
+    const cachedStats = getCachedData(cacheKey);
+    if (cachedStats) {
+      console.log('📦 Returning cached dashboard stats');
+      return res.json(cachedStats);
+    }
+    
+    console.log('⚡ Cache MISS - Querying ClickHouse for dashboard stats...');
+    
     // Get today's alerts count (Malaysia timezone)
     const alertsTodayQuery = await client.query({
       query: `
@@ -357,6 +416,9 @@ app.get('/api/dashboard-stats', async (req, res) => {
     };
 
     console.log('Sending stats:', stats);
+    
+    // Cache the stats
+    setCachedData(cacheKey, stats);
     res.json(stats);
   } catch (err) {
     console.error('Error in /api/dashboard-stats:', err);
@@ -378,6 +440,18 @@ app.get('/api/alerts', async (req, res) => {
   try {
     const { userId, userRole } = req.query;
     console.log('Fetching alerts from ClickHouse for user:', userId, 'role:', userRole);
+    
+    // Create cache key based on role and userId (for analyst filtering)
+    const cacheKey = `alerts_${userRole}_${userId || 'all'}`;
+    
+    // Check cache first
+    const cachedData = getCachedData(cacheKey);
+    if (cachedData) {
+      console.log(`📦 Returning cached alerts (${cachedData.length} items)`);
+      return res.json(cachedData);
+    }
+    
+    console.log('⚡ Cache MISS - Querying ClickHouse...');
     
     const result = await client.query({
       query: `
@@ -441,6 +515,8 @@ app.get('/api/alerts', async (req, res) => {
         assignment: assignmentsMap[alert.correlation_key] || null
       }));
 
+      // Cache the result
+      setCachedData(cacheKey, alertsWithAssignments);
       return res.json(alertsWithAssignments);
     }
 
@@ -472,6 +548,7 @@ app.get('/api/alerts', async (req, res) => {
         
         if (escalatedSnapshot.size === 0) {
           console.log('No escalated alerts found for user:', userId);
+          setCachedData(cacheKey, []);
           return res.json([]);
         }
         
@@ -620,6 +697,7 @@ app.get('/api/alerts', async (req, res) => {
         }
         
         console.log('Returning escalated alerts count:', escalatedAlerts.length);
+        setCachedData(cacheKey, escalatedAlerts);
         return res.json(escalatedAlerts);
       }
       
@@ -646,10 +724,12 @@ app.get('/api/alerts', async (req, res) => {
         }));
 
       console.log('Returning filtered alerts count:', filteredAlerts.length);
+      setCachedData(cacheKey, filteredAlerts);
       return res.json(filteredAlerts);
     }
 
     // For other roles (viewer, etc.), return all alerts without assignment info
+    setCachedData(cacheKey, enrichedData);
     res.json(enrichedData);
   } catch (err) {
     console.error('Error in /api/alerts:', err);
